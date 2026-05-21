@@ -111,8 +111,6 @@ def root():
     return {
         "ok": True,
         "service": "VTON MVP Backend",
-        "version": app.version,
-        "health": "/health",
     }
 
 
