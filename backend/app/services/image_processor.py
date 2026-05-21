@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from uuid import uuid4
@@ -7,6 +8,8 @@ from PIL import Image, ImageOps
 
 from app.services.url_utils import absolute_url
 
+
+LOGGER = logging.getLogger(__name__)
 
 UPLOAD_DIR = Path("uploads")
 ORIGINAL_DIR = UPLOAD_DIR / "originals"
@@ -33,9 +36,13 @@ def _extension_from_content_type(content_type: str | None) -> str:
     return ".jpg"
 
 
+def _is_rembg_disabled() -> bool:
+    return os.getenv("DISABLE_REMBG", "").strip().lower() == "true"
+
+
 async def save_garment_upload(file: UploadFile) -> tuple[str, str]:
     if file.content_type not in ALLOWED_CONTENT_TYPES:
-        raise ValueError("Formato inválido. Envie JPG, PNG ou WEBP.")
+        raise ValueError("Formato invalido. Envie JPG, PNG ou WEBP.")
 
     extension = _extension_from_content_type(file.content_type)
     filename = f"garment_{uuid4().hex}{extension}"
@@ -51,30 +58,56 @@ async def save_garment_upload(file: UploadFile) -> tuple[str, str]:
     return filename, str(destination)
 
 
+def _open_optimized_rgba(original: Path) -> Image.Image:
+    image = Image.open(original)
+    image = ImageOps.exif_transpose(image)
+    image.thumbnail((MAX_IMAGE_EDGE, MAX_IMAGE_EDGE), Image.Resampling.LANCZOS)
+    return image.convert("RGBA")
+
+
+def _save_lightweight_fallback(image: Image.Image, original: Path, reason: str) -> tuple[str, str]:
+    fallback_filename = f"{original.stem}_optimized.png"
+    fallback_path = PROCESSED_DIR / fallback_filename
+    image.save(fallback_path, "PNG", optimize=True)
+    LOGGER.info("Using lightweight image fallback for %s: %s", original.name, reason)
+    return fallback_filename, str(fallback_path)
+
+
 def remove_background(original_path: str) -> tuple[str, str]:
     original = Path(original_path)
 
     if not original.exists():
-        raise FileNotFoundError("Imagem original não encontrada.")
+        raise FileNotFoundError("Imagem original nao encontrada.")
 
-    output_filename = f"{original.stem}_nobg.png"
-    output_path = PROCESSED_DIR / output_filename
+    with _open_optimized_rgba(original) as image:
+        if _is_rembg_disabled():
+            return _save_lightweight_fallback(image, original, "DISABLE_REMBG=true")
 
-    with Image.open(original) as image:
-        image = ImageOps.exif_transpose(image)
-        image.thumbnail((MAX_IMAGE_EDGE, MAX_IMAGE_EDGE), Image.Resampling.LANCZOS)
-        image = image.convert("RGBA")
+        try:
+            from rembg import remove
+        except ImportError as error:
+            return _save_lightweight_fallback(
+                image,
+                original,
+                f"rembg is not installed ({error.__class__.__name__})",
+            )
 
-        if os.getenv("DISABLE_REMBG", "").strip().lower() == "true":
-            fallback_filename = f"{original.stem}_optimized.png"
-            fallback_path = PROCESSED_DIR / fallback_filename
-            image.save(fallback_path, "PNG", optimize=True)
-            return fallback_filename, str(fallback_path)
+        output_filename = f"{original.stem}_nobg.png"
+        output_path = PROCESSED_DIR / output_filename
 
-        from rembg import remove
-
-        processed = remove(image)
-        processed.save(output_path, "PNG", optimize=True)
+        try:
+            processed = remove(image)
+            processed.save(output_path, "PNG", optimize=True)
+        except Exception as error:
+            LOGGER.exception(
+                "rembg failed for %s; using lightweight fallback instead.",
+                original.name,
+            )
+            return _save_lightweight_fallback(
+                image,
+                original,
+                f"rembg failed ({error.__class__.__name__})",
+            )
 
     return output_filename, str(output_path)
 

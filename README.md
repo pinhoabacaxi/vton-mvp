@@ -1,4 +1,4 @@
-﻿# VTON MVP - Fashion Helper
+# VTON MVP - Fashion Helper
 
 MVP mobile de Virtual Try-On (VTON) para moda, com backend FastAPI e app React Native/Expo Android.
 
@@ -58,7 +58,7 @@ O arquivo `render.yaml` esta preparado para subir o backend a partir da pasta `b
 
 Depois de criar o servico no Render, configure:
 
-- `PUBLIC_BACKEND_URL=https://seu-servico.onrender.com`
+- `PUBLIC_BACKEND_URL=https://vton-mvp-api.onrender.com`
 - `DISABLE_REMBG=true` para plano Free
 - Chaves do provider VTON somente se usar Replicate/API externa
 

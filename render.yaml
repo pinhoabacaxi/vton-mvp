@@ -1,13 +1,15 @@
 services:
   - type: web
-    name: vton-mvp-backend
-    env: python
+    name: vton-mvp-api
+    runtime: python
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: VTON_PROVIDER
+        value: mock
       - key: DISABLE_REMBG
         value: "true"
       - key: PUBLIC_BACKEND_URL
-        sync: false
+        value: https://vton-mvp-api.onrender.com

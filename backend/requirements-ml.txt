@@ -1,0 +1,5 @@
+# Optional heavy ML dependencies for local/background-removal environments.
+# Do not install this file on Render Free Phase 1; use DISABLE_REMBG=true there.
+-r requirements.txt
+rembg==2.0.61
+onnxruntime==1.20.1

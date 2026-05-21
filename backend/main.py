@@ -1,5 +1,3 @@
-﻿import os
-
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -67,7 +65,7 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"ok": True}
 
 
 @app.post("/body/recommend", response_model=BodyRecommendationResponse)
@@ -120,7 +118,7 @@ async def scrape_product(input_data: ProductUrlInput):
     except Exception as error:
         raise HTTPException(
             status_code=400,
-            detail=f"Não foi possível analisar a URL: {error}",
+            detail=f"NÃ£o foi possÃ­vel analisar a URL: {error}",
         )
 
 
@@ -134,7 +132,7 @@ async def upload_garment(file: UploadFile = File(...)):
 
         filename, original_path = await save_garment_upload(file)
         processed_filename, processed_path = remove_background(original_path)
-        background_removed = os.getenv("DISABLE_REMBG", "").strip().lower() != "true"
+        background_removed = processed_filename.endswith("_nobg.png")
 
         return GarmentUploadResult(
             filename=filename,
