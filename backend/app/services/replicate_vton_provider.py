@@ -1,0 +1,216 @@
+import os
+import asyncio
+import time
+from typing import Any, Dict, Optional
+
+import httpx
+
+from app.models.vton import VtonPayload
+from app.services.url_utils import absolute_url
+
+
+class ReplicateNotConfigured(Exception):
+    pass
+
+
+class ReplicateProviderError(Exception):
+    pass
+
+
+REPLICATE_BASE_URL = "https://api.replicate.com/v1"
+
+
+def is_replicate_configured() -> bool:
+    token = os.getenv("REPLICATE_API_TOKEN", "").strip()
+    model = os.getenv("REPLICATE_MODEL", "").strip()
+    version = os.getenv("REPLICATE_VERSION", "").strip()
+
+    return bool(token and (model or version))
+
+
+def _get_headers() -> Dict[str, str]:
+    token = os.getenv("REPLICATE_API_TOKEN", "").strip()
+
+    if not token:
+        raise ReplicateNotConfigured("REPLICATE_API_TOKEN não configurado.")
+
+    return {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Prefer": "wait",
+    }
+
+
+def _absolute_backend_url(path_or_url: Optional[str]) -> Optional[str]:
+    if not path_or_url:
+        return None
+
+    url = absolute_url(path_or_url)
+    if not url.startswith(("http://", "https://")):
+        return None
+
+    return url
+
+
+def _build_replicate_input(payload: VtonPayload) -> Dict[str, Any]:
+    garment_url = _absolute_backend_url(payload.garment_processed_url)
+    person_image_url = _absolute_backend_url(payload.person_image_url)
+
+    if not garment_url:
+        raise ReplicateProviderError(
+            "garment_processed_url não está acessível publicamente. "
+            "Configure PUBLIC_BACKEND_URL ou envie uma URL absoluta."
+        )
+
+    prompt = (
+        "Virtual try-on preview of the garment on a neutral front-facing mannequin. "
+        "Preserve garment shape, fabric and color. Clean studio background."
+    )
+
+    return {
+        "person_image": person_image_url,
+        "garment_image": garment_url,
+        "cloth_image": garment_url,
+        "garm_img": garment_url,
+        "prompt": prompt,
+        "category": "upper_body",
+        "fit_notes": [zone.model_dump() for zone in payload.fit_zones],
+        "measurements": {
+            "height_cm": payload.mannequin.height_cm,
+            "chest_cm": payload.mannequin.chest_cm,
+            "waist_cm": payload.mannequin.waist_cm,
+            "hip_cm": payload.mannequin.hip_cm,
+        },
+    }
+
+
+async def run_replicate_vton(payload: VtonPayload) -> Dict[str, Any]:
+    token = os.getenv("REPLICATE_API_TOKEN", "").strip()
+    model = os.getenv("REPLICATE_MODEL", "").strip()
+    version = os.getenv("REPLICATE_VERSION", "").strip()
+
+    if not token:
+        raise ReplicateNotConfigured("REPLICATE_API_TOKEN não configurado.")
+
+    if not model and not version:
+        raise ReplicateNotConfigured("Configure REPLICATE_MODEL ou REPLICATE_VERSION.")
+
+    prediction = await _create_prediction(
+        model=model,
+        version=version,
+        input_data=_build_replicate_input(payload),
+    )
+
+    prediction_id = prediction.get("id")
+    status = prediction.get("status")
+
+    if status == "succeeded":
+        return prediction
+
+    if not prediction_id:
+        raise ReplicateProviderError(
+            f"Prediction criada sem id. Resposta: {prediction}"
+        )
+
+    return await _poll_prediction(prediction_id)
+
+
+async def _create_prediction(
+    model: str,
+    version: str,
+    input_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    headers = _get_headers()
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        if model:
+            url = f"{REPLICATE_BASE_URL}/models/{model}/predictions"
+            body = {
+                "input": input_data,
+            }
+            if version:
+                body["version"] = version
+
+            response = await client.post(url, json=body, headers=headers)
+        else:
+            url = f"{REPLICATE_BASE_URL}/predictions"
+            body = {
+                "version": version,
+                "input": input_data,
+            }
+            response = await client.post(url, json=body, headers=headers)
+
+    if response.status_code >= 400:
+        raise ReplicateProviderError(
+            f"Erro ao criar prediction na Replicate: {response.status_code} {response.text}"
+        )
+
+    return response.json()
+
+
+async def _poll_prediction(prediction_id: str) -> Dict[str, Any]:
+    headers = _get_headers()
+
+    timeout_seconds = int(os.getenv("REPLICATE_POLL_TIMEOUT_SECONDS", "180"))
+    interval_seconds = float(os.getenv("REPLICATE_POLL_INTERVAL_SECONDS", "3"))
+
+    deadline = time.time() + timeout_seconds
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        while time.time() < deadline:
+            response = await client.get(
+                f"{REPLICATE_BASE_URL}/predictions/{prediction_id}",
+                headers=headers,
+            )
+
+            if response.status_code >= 400:
+                raise ReplicateProviderError(
+                    f"Erro ao consultar prediction: {response.status_code} {response.text}"
+                )
+
+            data = response.json()
+            status = data.get("status")
+
+            if status == "succeeded":
+                return data
+
+            if status in {"failed", "canceled"}:
+                raise ReplicateProviderError(
+                    f"Prediction terminou com status {status}: {data}"
+                )
+
+            await asyncio.sleep(interval_seconds)
+
+    raise ReplicateProviderError(
+        f"Timeout aguardando prediction {prediction_id}."
+    )
+
+
+def extract_replicate_result_url(raw_response: Dict[str, Any]) -> Optional[str]:
+    output = raw_response.get("output")
+
+    if isinstance(output, str) and output.startswith(("http://", "https://", "/")):
+        return output
+
+    if isinstance(output, list):
+        for item in output:
+            if isinstance(item, str) and item.startswith(("http://", "https://", "/")):
+                return item
+            if isinstance(item, dict):
+                for key in ["url", "image", "image_url", "output_url", "result_url"]:
+                    value = item.get(key)
+                    if isinstance(value, str) and value.startswith(("http://", "https://", "/")):
+                        return value
+
+    if isinstance(output, dict):
+        for key in ["url", "image", "image_url", "output_url", "result_url"]:
+            value = output.get(key)
+            if isinstance(value, str) and value.startswith(("http://", "https://", "/")):
+                return value
+
+    for key in ["result_url", "image_url", "output_url", "url"]:
+        value = raw_response.get(key)
+        if isinstance(value, str) and value.startswith(("http://", "https://", "/")):
+            return value
+
+    return None

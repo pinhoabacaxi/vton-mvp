@@ -1,0 +1,66 @@
+﻿# Dependencies
+node_modules/
+frontend/node_modules/
+backend/.venv/
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Runtime uploads and generated media
+uploads/
+backend/uploads/
+*.tmp
+*.temp
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+frontend/.env.*
+
+# Expo / React Native
+.expo/
+frontend/.expo/
+.expo-shared/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Android / Gradle build outputs
+.gradle/
+build/
+frontend/android/.gradle/
+frontend/android/build/
+frontend/android/app/build/
+*.apk
+*.aab
+local.properties
+
+# IDE / OS
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local QA and AI training artifacts
+backend/ai_training_*.md
+backend/save_ai_training_*.ps1
+C:/Dev/AI/logs/
+
+# Accidental nested repository/scratch folder
+Fashion Helper/
+frontend/index.js.txt
+

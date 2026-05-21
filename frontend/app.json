@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "vton-mvp",
+    "slug": "vton-mvp",
+    "newArchEnabled": false,
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
+      ]
+    ],
+    "android": {
+      "package": "com.anonymous.vtonmvp",
+      "permissions": [
+        "INTERNET",
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
+      ]
+    },
+    "extra": {
+      "apiUrl": "https://SEU-SERVICO.onrender.com"
+    }
+  }
+}
