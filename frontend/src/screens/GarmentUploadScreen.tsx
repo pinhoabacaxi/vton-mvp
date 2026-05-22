@@ -7,6 +7,7 @@ import {
   AppScreen,
   FashionCard,
   InfoPill,
+  JourneyStepper,
   PrimaryButton,
   SecondaryButton,
   StepHeader,
@@ -114,6 +115,7 @@ export function GarmentUploadScreen({ onContinue, onUploadComplete }: Props) {
           title="Enviar foto da peça"
           subtitle="Use uma foto frontal da roupa, com boa luz e fundo contrastante. Vamos preparar a imagem para a prévia do look."
         />
+        <JourneyStepper activeStep="piece" />
 
         <PrimaryButton label="Escolher foto da peça" onPress={pickImage} tone="secondary" />
 

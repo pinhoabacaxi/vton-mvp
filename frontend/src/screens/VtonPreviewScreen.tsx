@@ -12,6 +12,7 @@ import {
   AppScreen,
   FashionCard,
   FriendlyError,
+  JourneyStepper,
   LoadingState,
   PrimaryButton,
   StepHeader,
@@ -118,6 +119,7 @@ export function VtonPreviewScreen({
           title="Prévia do look"
           subtitle="Vamos gerar uma estimativa visual da peça no seu provador. O resultado ajuda a imaginar proporção e estilo, mas não substitui uma prova real."
         />
+        <JourneyStepper activeStep="look" />
 
         <Mannequin3D params={mannequin} fitZones={fitZones} />
 

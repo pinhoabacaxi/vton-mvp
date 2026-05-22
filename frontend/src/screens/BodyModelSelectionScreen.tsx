@@ -12,6 +12,7 @@ import {
   AppScreen,
   FashionCard,
   InfoPill,
+  JourneyStepper,
   StepHeader,
   fashionColors,
 } from "../components/FashionUI";
@@ -64,6 +65,7 @@ export function BodyModelSelectionScreen({ recommendation, onSelect }: Props) {
           title="Escolha uma silhueta de partida"
           subtitle="Selecione a base que mais parece com você hoje. Ela é só o ponto inicial: as medidas refinam o provador na próxima etapa."
         />
+        <JourneyStepper activeStep="silhouette" />
 
         {loadingPreviews ? (
           <FashionCard>

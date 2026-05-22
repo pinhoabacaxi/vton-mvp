@@ -27,6 +27,16 @@ export const fashionColors = {
   dangerText: "#fecdd3",
 };
 
+export const guidedJourneySteps = [
+  { key: "profile", label: "Perfil" },
+  { key: "silhouette", label: "Silhueta" },
+  { key: "refine", label: "Medidas" },
+  { key: "piece", label: "Peça" },
+  { key: "look", label: "Look" },
+] as const;
+
+type GuidedJourneyStepKey = (typeof guidedJourneySteps)[number]["key"];
+
 export function AppScreen(props: {
   children: React.ReactNode;
   padded?: boolean;
@@ -87,6 +97,59 @@ export function StepHeader(props: {
           {props.subtitle}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+export function JourneyStepper(props: {
+  activeStep: GuidedJourneyStepKey;
+}) {
+  const activeIndex = guidedJourneySteps.findIndex((step) => step.key === props.activeStep);
+
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        {guidedJourneySteps.map((step, index) => {
+          const isActive = step.key === props.activeStep;
+          const isDone = activeIndex >= 0 && index < activeIndex;
+
+          return (
+            <View
+              key={step.key}
+              style={{
+                flex: 1,
+                height: 6,
+                borderRadius: 999,
+                backgroundColor: isActive || isDone ? fashionColors.primary : fashionColors.surfaceSoft,
+                borderWidth: 1,
+                borderColor: isActive ? "#c4b5fd" : fashionColors.border,
+              }}
+            />
+          );
+        })}
+      </View>
+
+      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 6 }}>
+        {guidedJourneySteps.map((step) => {
+          const isActive = step.key === props.activeStep;
+
+          return (
+            <Text
+              key={step.key}
+              numberOfLines={1}
+              style={{
+                flex: 1,
+                color: isActive ? fashionColors.text : fashionColors.textMuted,
+                fontSize: 10,
+                fontWeight: isActive ? "900" : "700",
+                textAlign: "center",
+              }}
+            >
+              {step.label}
+            </Text>
+          );
+        })}
+      </View>
     </View>
   );
 }

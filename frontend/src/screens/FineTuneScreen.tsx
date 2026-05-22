@@ -3,6 +3,7 @@ import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import {
   AppScreen,
   FashionCard,
+  JourneyStepper,
   MeasurementInput,
   PrimaryButton,
   StepHeader,
@@ -87,6 +88,7 @@ export function FineTuneScreen({ initial, selectedModel, onSubmit }: Props) {
           title="Refinar medidas"
           subtitle={`Base escolhida: ${selectedModel.label}. Confirme as medidas principais; o restante pode ficar como estimativa e ser ajustado depois.`}
         />
+        <JourneyStepper activeStep="refine" />
 
         <FashionCard highlighted>
           <Text style={{ color: fashionColors.text, fontWeight: "900", fontSize: 16 }}>

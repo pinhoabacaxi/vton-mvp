@@ -6,16 +6,19 @@ import { MannequinParams } from "../types/body";
 
 type Props = {
   mannequin: MannequinParams;
+  showHeader?: boolean;
 };
 
-export function MannequinPreviewScreen({ mannequin }: Props) {
+export function MannequinPreviewScreen({ mannequin, showHeader = true }: Props) {
   return (
     <View style={{ gap: 14 }}>
-      <StepHeader
-        eyebrow="Provador"
-        title="Seu provador está pronto"
-        subtitle="Esta é uma base visual estimada para testar proporção, caimento e estilo. Você pode editar as medidas quando quiser."
-      />
+      {showHeader ? (
+        <StepHeader
+          eyebrow="Provador"
+          title="Seu provador está pronto"
+          subtitle="Esta é uma base visual estimada para testar proporção, caimento e estilo. Você pode editar as medidas quando quiser."
+        />
+      ) : null}
 
       <InfoPill label="Prévia estimada" tone="gold" />
 

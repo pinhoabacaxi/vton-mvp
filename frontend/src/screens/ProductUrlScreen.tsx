@@ -5,6 +5,7 @@ import {
   AppScreen,
   FashionCard,
   InfoPill,
+  JourneyStepper,
   PrimaryButton,
   SecondaryButton,
   StepHeader,
@@ -79,6 +80,7 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
           title="Adicionar peça por link"
           subtitle="Cole o link da loja para tentarmos encontrar imagem, nome, preço e medidas. Se a loja esconder alguma informação, o app faz uma estimativa cuidadosa."
         />
+        <JourneyStepper activeStep="piece" />
 
         <FashionCard>
           <Text style={{ color: fashionColors.text, fontWeight: "900" }}>Link da peça</Text>

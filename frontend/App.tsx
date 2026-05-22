@@ -1,6 +1,6 @@
 ﻿import "react-native-gesture-handler";
 import React, { useState, useEffect } from "react";
-import { ActivityIndicator, Alert, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, SafeAreaView, Text, TouchableOpacity, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
@@ -20,10 +20,10 @@ import { useHistoryStore } from "./src/stores/useHistoryStore";
 import { useClosetStore } from "./src/stores/useClosetStore";
 import { loadSavedBodyProfile, saveSavedBodyProfile } from "./src/storage/bodyProfileStorage";
 
+import { HomeScreen } from "./src/screens/HomeScreen";
 import { MeasurementsScreen } from "./src/screens/MeasurementsScreen";
 import { BodyModelSelectionScreen } from "./src/screens/BodyModelSelectionScreen";
 import { FineTuneScreen } from "./src/screens/FineTuneScreen";
-import { MannequinPreviewScreen } from "./src/screens/MannequinPreviewScreen";
 import ProductUrlScreen from "./src/screens/ProductUrlScreen";
 import { GarmentUploadScreen } from "./src/screens/GarmentUploadScreen";
 import { FitCheckScreen } from "./src/screens/FitCheckScreen";
@@ -31,8 +31,10 @@ import { VtonPreviewScreen } from "./src/screens/VtonPreviewScreen";
 import VtonResultScreen from "./src/screens/VtonResultScreen";
 import LookHistoryScreen from "./src/screens/LookHistoryScreen";
 import ClosetScreen from "./src/screens/ClosetScreen";
+import { ProvadorHubScreen } from "./src/screens/ProvadorHubScreen";
 
 type RootStackParamList = {
+  Home: undefined;
   Measurements: undefined;
   SelectModel: undefined;
   FineTune: undefined;
@@ -76,7 +78,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [bootingProfile, setBootingProfile] = useState(true);
   const [initialRouteName, setInitialRouteName] =
-    useState<keyof RootStackParamList>("Measurements");
+    useState<keyof RootStackParamList>("Home");
   const looks = useHistoryStore((state) => state.looks);
   const loadHistory = useHistoryStore((state) => state.loadHistory);
   const addLook = useHistoryStore((state) => state.addLook);
@@ -129,7 +131,7 @@ export default function App() {
           setInitialInput(profile.initial_input);
           setSelectedModel(profile.selected_model);
           setMannequin(profile.mannequin);
-          setInitialRouteName("Preview");
+          setInitialRouteName("Home");
         }
       } finally {
         if (mounted) {
@@ -219,7 +221,7 @@ export default function App() {
         <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f", justifyContent: "center", alignItems: "center", gap: 12 }}>
           <ActivityIndicator size="large" color="white" />
           <Text style={{ color: "#d8c7ff", fontWeight: "700" }}>
-            Carregando seu manequim base...
+            Carregando seu provador...
           </Text>
         </SafeAreaView>
         <StatusBar style="light" />
@@ -231,6 +233,20 @@ export default function App() {
     <SafeAreaProvider>
       <NavigationContainer>
         <Stack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Home">
+            {(props) => (
+              <HomeScreen
+                hasProfile={Boolean(mannequin)}
+                lookCount={looks.length}
+                closetCount={closetItems.length}
+                onStart={() => props.navigation.navigate("Measurements")}
+                onContinue={() => props.navigation.navigate(mannequin ? "Preview" : "Measurements")}
+                onOpenCloset={() => props.navigation.navigate(mannequin ? "Closet" : "Measurements")}
+                onOpenHistory={() => props.navigation.navigate("LookHistory")}
+              />
+            )}
+          </Stack.Screen>
+
           <Stack.Screen name="Measurements">
             {(props) => (
               <MeasurementsScreen
@@ -249,7 +265,7 @@ export default function App() {
               ) : (
                 <MissingFlowScreen
                   message="Não encontramos sua sugestão de silhueta. Volte ao início para recomeçar com calma."
-                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
+                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
                 />
               )
             }
@@ -266,7 +282,7 @@ export default function App() {
               ) : (
                 <MissingFlowScreen
                   message="Seu perfil ainda não está completo. Volte ao início para refazer as medidas."
-                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
+                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
                 />
               )
             }
@@ -275,80 +291,21 @@ export default function App() {
           <Stack.Screen name="Preview">
             {(props) =>
               mannequin ? (
-                <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f" }}>
-                  <ScrollView contentContainerStyle={{ padding: 20, gap: 12 }}>
-                    <MannequinPreviewScreen mannequin={mannequin} />
-
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                      <TouchableOpacity
-                        onPress={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
-                        style={{ flex: 1, backgroundColor: "#312044", padding: 12, borderRadius: 10, alignItems: "center" }}
-                      >
-                        <Text style={{ color: "white", fontWeight: "800" }}>Editar medidas</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => props.navigation.navigate("Closet")}
-                        style={{ flex: 1, backgroundColor: "#4c1d95", padding: 12, borderRadius: 10, alignItems: "center" }}
-                      >
-                        <Text style={{ color: "white", fontWeight: "800" }}>Meu Armário</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={{ color: "white", fontWeight: "800", marginBottom: 8 }}
-                        >
-                          Próximo passo
-                        </Text>
-                        <View style={{ gap: 8 }}>
-                          <View style={{ flexDirection: "row", gap: 8 }}>
-                            <Text
-                              style={{ color: "#d8c7ff", fontWeight: "700" }}
-                            >
-                              Peça:
-                            </Text>
-                            <Text style={{ color: "#c4b5fd" }}>{productUrl ?? "Nenhum"}</Text>
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                      <View style={{ flex: 1 }}>
-                        <TouchableOpacity
-                          onPress={() => props.navigation.navigate("ProductUrl")}
-                          style={{ backgroundColor: "#6b7280", padding: 12, borderRadius: 10, alignItems: "center" }}
-                        >
-                          <Text style={{ color: "white", fontWeight: "800" }}>Adicionar por link</Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={{ flex: 1 }}>
-                        <TouchableOpacity
-                          onPress={() => props.navigation.navigate("GarmentUpload")}
-                          style={{ backgroundColor: "#8b5cf6", padding: 12, borderRadius: 10, alignItems: "center" }}
-                        >
-                          <Text style={{ color: "white", fontWeight: "800" }}>Enviar foto</Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={{ flex: 1 }}>
-                        <TouchableOpacity
-                          onPress={() => props.navigation.navigate("FitCheck")}
-                          style={{ backgroundColor: "#3b82f6", padding: 12, borderRadius: 10, alignItems: "center" }}
-                        >
-                          <Text style={{ color: "white", fontWeight: "800" }}>Ver caimento</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </ScrollView>
-                </SafeAreaView>
+                <ProvadorHubScreen
+                  mannequin={mannequin}
+                  productUrl={productUrl}
+                  source={productSource}
+                  hasGarment={Boolean(garment)}
+                  onEditMeasurements={() => props.navigation.navigate("Measurements")}
+                  onOpenCloset={() => props.navigation.navigate("Closet")}
+                  onAddByLink={() => props.navigation.navigate("ProductUrl")}
+                  onUploadPhoto={() => props.navigation.navigate("GarmentUpload")}
+                  onCheckFit={() => props.navigation.navigate("FitCheck")}
+                />
               ) : (
                 <MissingFlowScreen
                   message="Seu provador ainda não está pronto. Volte ao início para montar novamente."
-                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
+                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
                 />
               )
             }
@@ -376,7 +333,7 @@ export default function App() {
               ) : (
                 <MissingFlowScreen
                   message="Não há manequim ativo. Volte ao início para continuar."
-                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
+                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
                 />
               )
             }
@@ -411,7 +368,7 @@ export default function App() {
               ) : (
                 <MissingFlowScreen
                   message="Monte seu provador antes de ver o caimento da peça."
-                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
+                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
                 />
               )
             }
@@ -435,7 +392,7 @@ export default function App() {
               ) : (
                 <MissingFlowScreen
                   message="Faltam dados para gerar a prévia do look. Reinicie a jornada."
-                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
+                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
                 />
               )
             }
@@ -459,7 +416,7 @@ export default function App() {
               ) : (
                 <MissingFlowScreen
                   message="Ainda não há uma prévia pronta. Volte ao fluxo e gere um novo look."
-                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
+                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
                 />
               )
             }
@@ -470,7 +427,7 @@ export default function App() {
               <LookHistoryScreen
                 looks={looks}
                 onOpenLook={(look) => handleLookOpen(look, props.navigation)}
-                onBack={() => props.navigation.navigate("Measurements")}
+                onBack={() => props.navigation.navigate("Home")}
                 onClear={clearHistory}
               />
             )}
@@ -492,7 +449,7 @@ export default function App() {
               ) : (
                 <MissingFlowScreen
                   message="Monte seu provador para usar o armário."
-                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
+                  onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Home" }] })}
                 />
               )
             }

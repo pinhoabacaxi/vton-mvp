@@ -2,7 +2,6 @@
 import {
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   ScrollView,
   Text,
   TextInput,
@@ -10,6 +9,14 @@ import {
   View,
 } from "react-native";
 import { checkFit } from "../api/client";
+import {
+  AppScreen,
+  FashionCard,
+  JourneyStepper,
+  PrimaryButton,
+  StepHeader,
+  fashionColors,
+} from "../components/FashionUI";
 import { Mannequin3D } from "../components/Mannequin3D";
 import { MannequinParams } from "../types/body";
 import { FitCheckResult, ProductScrapeResult, SizeMeasurement } from "../types/product";
@@ -152,29 +159,20 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f" }}>
+    <AppScreen>
       <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
-        <Text style={{ color: "white", fontSize: 28, fontWeight: "800" }}>
-          Como pode vestir
-        </Text>
-
-        <Text style={{ color: "#d8c7ff", fontSize: 15 }}>
-          Compare a peça com seu provador e veja uma estimativa visual de folga, proporção e conforto.
-        </Text>
+        <StepHeader
+          eyebrow="Caimento"
+          step="4 de 5"
+          title="Como pode vestir"
+          subtitle="Compare a peça com seu provador e veja uma estimativa visual de folga, proporção e conforto."
+        />
+        <JourneyStepper activeStep="piece" />
 
         <Mannequin3D params={mannequin} fitZones={displayResult?.zones} />
 
-        <View
-          style={{
-            backgroundColor: "#21102f",
-            borderRadius: 18,
-            padding: 14,
-            gap: 12,
-            borderWidth: 1,
-            borderColor: "#4c2a69",
-          }}
-        >
-          <Text style={{ color: "white", fontSize: 18, fontWeight: "800" }}>
+        <FashionCard>
+          <Text style={{ color: fashionColors.text, fontSize: 18, fontWeight: "900" }}>
             Medidas da peça
           </Text>
 
@@ -222,38 +220,12 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
           <Input label="Coxa da peça em cm" value={thigh} onChangeText={setThigh} />
           <Input label="Ombro da peça em cm" value={shoulder} onChangeText={setShoulder} />
 
-          <TouchableOpacity
-            onPress={runFitCheck}
-            disabled={loading}
-            style={{
-              backgroundColor: loading ? "#5b3d87" : "#8b5cf6",
-              padding: 16,
-              borderRadius: 18,
-              alignItems: "center",
-            }}
-          >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={{ color: "white", fontWeight: "800" }}>
-                Ver caimento
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
+          <PrimaryButton label="Ver caimento" onPress={runFitCheck} loading={loading} />
+        </FashionCard>
 
         {displayResult && (
-          <View
-            style={{
-              backgroundColor: "#21102f",
-              borderRadius: 18,
-              padding: 14,
-              gap: 10,
-              borderWidth: 1,
-              borderColor: "#4c2a69",
-            }}
-          >
-            <Text style={{ color: "white", fontSize: 18, fontWeight: "800" }}>
+          <FashionCard highlighted>
+            <Text style={{ color: fashionColors.text, fontSize: 18, fontWeight: "900" }}>
               Resumo de caimento
             </Text>
 
@@ -316,10 +288,10 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
                 Gerar prévia do look
               </Text>
             </TouchableOpacity>
-          </View>
+          </FashionCard>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </AppScreen>
   );
 }
 

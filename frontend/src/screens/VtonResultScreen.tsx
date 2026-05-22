@@ -17,6 +17,7 @@ import {
   AppScreen,
   FashionCard,
   InfoPill,
+  JourneyStepper,
   PrimaryButton,
   SecondaryButton,
   StepHeader,
@@ -132,6 +133,7 @@ export function VtonResultScreen({
           title="Seu look virtual"
           subtitle="Prévia estimada para visualizar proporção, estilo e pontos de caimento. O tecido, o corte e a foto original podem mudar o resultado real."
         />
+        <JourneyStepper activeStep="look" />
 
         <InfoPill label="Prévia estimada" tone="gold" />
 

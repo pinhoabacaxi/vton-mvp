@@ -3,6 +3,7 @@ import { Alert, ScrollView, Text, View } from "react-native";
 import {
   AppScreen,
   FashionCard,
+  JourneyStepper,
   MeasurementInput,
   PrimaryButton,
   StepHeader,
@@ -51,6 +52,7 @@ export function MeasurementsScreen({ onSubmit }: Props) {
           title="Monte seu provador"
           subtitle="Vamos criar uma base aproximada para visualizar caimento, proporção e estilo antes de comprar. Você poderá ajustar tudo depois."
         />
+        <JourneyStepper activeStep="profile" />
 
         <FashionCard highlighted>
           <Text style={{ color: fashionColors.text, fontWeight: "900", fontSize: 17 }}>
