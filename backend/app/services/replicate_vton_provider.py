@@ -76,6 +76,12 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _is_idm_vton_model(model_name: str, schema: str) -> bool:
+    return schema in {"idm_vton", "idm-vton"} or (
+        not schema and "idm-vton" in model_name
+    )
+
+
 def _build_replicate_input(payload: VtonPayload) -> Dict[str, Any]:
     garment_url = _absolute_backend_url(payload.garment_processed_url)
     person_image_url = _absolute_backend_url(payload.person_image_url)
@@ -102,15 +108,19 @@ def _build_replicate_input(payload: VtonPayload) -> Dict[str, Any]:
     schema = os.getenv("REPLICATE_INPUT_SCHEMA", "").strip().lower()
     model_name = os.getenv("REPLICATE_MODEL", "").strip().lower()
 
-    if schema in {"idm_vton", "idm-vton"} or (not schema and "idm-vton" in model_name):
+    if _is_idm_vton_model(model_name, schema):
         return {
             "human_img": person_image_url,
             "garm_img": garment_url,
             "garment_des": prompt,
             "category": category,
-            "is_checked": _env_bool("REPLICATE_USE_AUTO_MASK", True),
-            "is_checked_crop": _env_bool("REPLICATE_AUTO_CROP", False),
-            "denoise_steps": _env_int("REPLICATE_DENOISE_STEPS", 30),
+            "crop": _env_bool("REPLICATE_AUTO_CROP", False),
+            "force_dc": _env_bool("REPLICATE_FORCE_DC", False),
+            "mask_only": _env_bool("REPLICATE_MASK_ONLY", False),
+            "steps": _env_int(
+                "REPLICATE_STEPS",
+                _env_int("REPLICATE_DENOISE_STEPS", 30),
+            ),
             "seed": _env_int("REPLICATE_SEED", 42),
         }
 
@@ -176,15 +186,37 @@ async def _create_prediction(
     headers = _get_headers()
 
     async with httpx.AsyncClient(timeout=120) as client:
-        if model:
+        if version:
+            response = await client.post(
+                f"{REPLICATE_BASE_URL}/predictions",
+                json={
+                    "version": version,
+                    "input": input_data,
+                },
+                headers=headers,
+            )
+        elif model:
             url = f"{REPLICATE_BASE_URL}/models/{model}/predictions"
             body = {
                 "input": input_data,
             }
-            if version:
-                body["version"] = version
 
             response = await client.post(url, json=body, headers=headers)
+
+            if response.status_code == 404:
+                latest_version = await _resolve_latest_model_version(
+                    client=client,
+                    model=model,
+                    headers=headers,
+                )
+                response = await client.post(
+                    f"{REPLICATE_BASE_URL}/predictions",
+                    json={
+                        "version": latest_version,
+                        "input": input_data,
+                    },
+                    headers=headers,
+                )
         else:
             url = f"{REPLICATE_BASE_URL}/predictions"
             body = {
@@ -199,6 +231,42 @@ async def _create_prediction(
         )
 
     return response.json()
+
+
+async def _resolve_latest_model_version(
+    client: httpx.AsyncClient,
+    model: str,
+    headers: Dict[str, str],
+) -> str:
+    parts = model.split("/", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ReplicateProviderError(
+            "REPLICATE_MODEL deve estar no formato owner/model ou defina REPLICATE_VERSION."
+        )
+
+    response = await client.get(
+        f"{REPLICATE_BASE_URL}/models/{parts[0]}/{parts[1]}",
+        headers=headers,
+    )
+
+    if response.status_code >= 400:
+        raise ReplicateProviderError(
+            f"Modelo Replicate nao encontrado ou indisponivel: {response.status_code} {response.text}"
+        )
+
+    data = response.json()
+    latest_version = data.get("latest_version")
+    if isinstance(latest_version, dict):
+        version_id = latest_version.get("id")
+    else:
+        version_id = latest_version
+
+    if not isinstance(version_id, str) or not version_id:
+        raise ReplicateProviderError(
+            "Modelo Replicate sem latest_version. Defina REPLICATE_VERSION explicitamente."
+        )
+
+    return version_id
 
 
 async def _poll_prediction(prediction_id: str) -> Dict[str, Any]:

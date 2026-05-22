@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -43,6 +44,7 @@ PERSON_RENDER_DIR.mkdir(parents=True, exist_ok=True)
 VTON_TASK_POLL_SECONDS = 2
 _VTON_TASKS: Dict[str, VtonTaskStatusResponse] = {}
 _GARMENT_RENDERER = MannequinGarmentRenderer()
+LOGGER = logging.getLogger(__name__)
 
 
 def prepare_vton_payload(data: VtonPrepareInput) -> VtonPayload:
@@ -183,6 +185,10 @@ async def run_vton(data: VtonRunInput) -> VtonRunResult:
             try:
                 return await _run_external_only(data, provider)
             except Exception as error:
+                LOGGER.warning(
+                    "External VTON provider failed; using local mock fallback: %s",
+                    error,
+                )
                 mock = create_mock_vton_result(VtonMockInput(payload=data.payload))
 
                 return VtonRunResult(
@@ -193,7 +199,10 @@ async def run_vton(data: VtonRunInput) -> VtonRunResult:
                     status="succeeded",
                     used_fallback=True,
                     success=True,
-                    message=f"API externa falhou. Fallback mock usado. Erro original: {error}",
+                    message=(
+                        "A prévia realista não ficou disponível agora. "
+                        "Geramos uma prévia rápida para você continuar."
+                    ),
                     raw_response=None,
                 )
 
@@ -207,7 +216,10 @@ async def run_vton(data: VtonRunInput) -> VtonRunResult:
             status="succeeded",
             used_fallback=True,
             success=True,
-            message="API VTON externa nao configurada. Fallback mock usado.",
+            message=(
+                "A prévia realista ainda não está configurada. "
+                "Geramos uma prévia rápida para você continuar."
+            ),
             raw_response=None,
         )
 
