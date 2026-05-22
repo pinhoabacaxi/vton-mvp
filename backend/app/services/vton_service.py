@@ -338,7 +338,11 @@ async def _run_external_only(data: VtonRunInput, provider: str) -> VtonRunResult
 
 
 async def _run_huggingface_only(data: VtonRunInput) -> VtonRunResult:
-    public_payload = _ensure_public_vton_assets(data.payload, refresh_person_image=True)
+    public_payload = _ensure_public_vton_assets(
+        data.payload,
+        refresh_person_image=False,
+        create_missing_person=False,
+    )
     raw_response = await run_huggingface_vton(public_payload)
     result_url = extract_huggingface_result_url(raw_response)
 
@@ -372,6 +376,7 @@ def _fallback_error(provider: str, error: Exception) -> Dict[str, str]:
 def _ensure_public_vton_assets(
     payload: VtonPayload,
     refresh_person_image: bool = False,
+    create_missing_person: bool = True,
 ) -> VtonPayload:
     garment_processed_url = (
         absolute_url(payload.garment_processed_url)
@@ -392,7 +397,7 @@ def _ensure_public_vton_assets(
     if not garment_processed_url and garment_original_url:
         garment_processed_url = garment_original_url
 
-    if refresh_person_image or not person_image_url:
+    if refresh_person_image or (create_missing_person and not person_image_url):
         person_image_url = _create_public_person_image(payload)
 
     api_ready_payload = dict(payload.api_ready_payload)

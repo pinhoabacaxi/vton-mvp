@@ -35,3 +35,11 @@ services:
         value: "42"
       - key: HF_GARMENT_DESCRIPTION
         value: clothing item for virtual try-on
+      - key: HF_NORMALIZE_INPUTS
+        value: "true"
+      - key: HF_PERSON_WIDTH
+        value: "768"
+      - key: HF_PERSON_HEIGHT
+        value: "1024"
+      - key: HF_SKIP_FOR_MOCK_PERSON
+        value: "false"
