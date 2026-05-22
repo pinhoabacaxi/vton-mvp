@@ -1,12 +1,11 @@
 import React, { useRef, useState } from "react";
 import {
-  SafeAreaView,
-  ScrollView,
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
   Alert,
+  Image,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import ViewShot from "react-native-view-shot";
 import { resolveApiUrl } from "../api/client";
@@ -14,11 +13,20 @@ import { shareImageFromUrl } from "../utils/shareImage";
 import { shareCapturedImage } from "../utils/shareViewShot";
 import { openExternalUrl, getPreferredBuyUrl } from "../utils/openExternalUrl";
 import { SocialLookCard } from "../components/SocialLookCard";
+import {
+  AppScreen,
+  FashionCard,
+  InfoPill,
+  PrimaryButton,
+  SecondaryButton,
+  StepHeader,
+  fashionColors,
+} from "../components/FashionUI";
 import { MannequinParams } from "../types/body";
 import { FitZone, GarmentUploadResult } from "../types/product";
 import { MannequinRenderResult as MannequinFrontRenderResult } from "../types/mannequin";
 import { VtonPayload, VtonRunResult } from "../types/vton";
-import { SaveLookInput, createSavedLook, LookSource } from "../types/look";
+import { SaveLookInput, LookSource } from "../types/look";
 
 type Props = {
   mannequin: MannequinParams;
@@ -48,135 +56,51 @@ export function VtonResultScreen({
   const [cardReady, setCardReady] = useState(false);
   const resultImageUrl = resolveApiUrl(result.result_url ?? null);
   const cardRef = useRef<ViewShot>(null);
-
-  function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-      <View style={{ backgroundColor: "#21102f", borderRadius: 14, padding: 12, gap: 8 }}>
-        <Text style={{ color: "white", fontWeight: "800", marginBottom: 6 }}>{title}</Text>
-        {children}
-      </View>
-    );
-  }
-
-  function InfoLine({ label, value }: { label: string; value?: string | React.ReactNode }) {
-    return (
-      <View style={{ flexDirection: "row", justifyContent: "space-between", marginVertical: 4 }}>
-        <Text style={{ color: "#d8c7ff", fontWeight: "700" }}>{label}</Text>
-        <Text style={{ color: "#c4b5fd" }}>{value ?? "-"}</Text>
-      </View>
-    );
-  }
-
-  function colorToHex(color: string): string {
-    switch (color) {
-      case "red":
-        return "#ef4444";
-      case "yellow":
-        return "#facc15";
-      case "green":
-        return "#22c55e";
-      case "blue":
-        return "#38bdf8";
-      case "gray":
-        return "#9ca3af";
-      default:
-        return "#8b5cf6";
-    }
-  }
-
-  function zoneLabel(zone: string): string {
-    switch (zone) {
-      case "chest":
-        return "Busto/Tórax";
-      case "waist":
-        return "Cintura";
-      case "hip":
-        return "Quadril";
-      case "length":
-        return "Comprimento";
-      case "sleeve":
-        return "Manga";
-      case "biceps":
-        return "Bíceps";
-      case "top_length":
-        return "Comprimento superior";
-      case "inseam":
-        return "Entrepernas";
-      case "thigh":
-        return "Coxa";
-      case "shoulder":
-        return "Ombros";
-      default:
-        return zone;
-    }
-  }
-
-  function buildFitSummary(fitZones: FitZone[]): string {
-    if (fitZones.length === 0) return "Caimento ainda não avaliado.";
-
-    const tight = fitZones.filter((zone) =>
-      zone.status === "apertado" || zone.status === "too_small" || zone.status === "tight" || zone.color === "red"
-    ).length;
-
-    const balanced = fitZones.filter((zone) =>
-      zone.status === "justo" || zone.status === "balanced" || zone.color === "yellow"
-    ).length;
-
-    const loose = fitZones.filter((zone) =>
-      zone.status === "folgado" || zone.status === "loose" || zone.color === "green" || zone.color === "blue"
-    ).length;
-
-    if (tight > 0) return "Atenção: algumas regiões podem ficar apertadas.";
-    if (balanced > 0) return "Caimento próximo ao corpo.";
-    if (loose > 0) return "Folga confortável na maior parte da peça.";
-
-    return "Caimento avaliado.";
-  }
+  const buyUrl = getPreferredBuyUrl(source ?? null);
+  const fitSummary = buildFitSummary(fitZones);
 
   async function handleShare() {
     if (!resultImageUrl) {
-      Alert.alert("Sem imagem", "Não há imagem VTON para compartilhar.");
+      Alert.alert("Sem imagem para compartilhar", "Gere uma nova prévia do look e tente novamente.");
       return;
     }
 
     try {
       await shareImageFromUrl(resultImageUrl);
     } catch (err) {
-      Alert.alert("Erro ao compartilhar", err instanceof Error ? err.message : "Erro inesperado");
+      Alert.alert("Não foi possível compartilhar", err instanceof Error ? err.message : "Tente novamente em instantes.");
     }
   }
 
   async function shareCard() {
     try {
       if (!cardReady) {
-        throw new Error("O card social ainda não está pronto para captura.");
+        throw new Error("O card ainda está sendo preparado.");
       }
 
       const uri = await cardRef.current?.capture?.();
 
       if (!uri) {
-        throw new Error("Não foi possível capturar o card.");
+        throw new Error("Não conseguimos capturar o card.");
       }
 
       await shareCapturedImage(uri);
     } catch (error) {
       Alert.alert(
-        "Erro ao compartilhar card",
-        error instanceof Error ? error.message : "Erro inesperado"
+        "Não foi possível compartilhar o card",
+        error instanceof Error ? error.message : "Tente novamente em instantes."
       );
     }
   }
 
-  const buyUrl = getPreferredBuyUrl(source ?? null);
-
   async function buy() {
     try {
-      if (!buyUrl) throw new Error("URL de compra indisponível.");
+      if (!buyUrl) throw new Error("Link de compra indisponível.");
       await openExternalUrl(buyUrl);
     } catch (error) {
       Alert.alert(
         "Não foi possível abrir a compra",
-        error instanceof Error ? error.message : "Erro inesperado"
+        error instanceof Error ? error.message : "Tente novamente em instantes."
       );
     }
   }
@@ -195,71 +119,83 @@ export function VtonResultScreen({
       };
 
       onSaveLook(lookInput);
-      Alert.alert("Salvo", "Look salvo no histórico local.");
     } catch (err) {
-      Alert.alert("Erro", err instanceof Error ? err.message : "Erro inesperado");
+      Alert.alert("Não foi possível salvar", err instanceof Error ? err.message : "Tente novamente em instantes.");
     }
   }
 
-
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f" }}>
-      <ScrollView contentContainerStyle={{ padding: 20, gap: 12 }}>
-        <Text style={{ color: "white", fontSize: 26, fontWeight: "800" }}>Resultado VTON</Text>
+    <AppScreen>
+      <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }}>
+        <StepHeader
+          eyebrow="Resultado"
+          title="Seu look virtual"
+          subtitle="Prévia estimada para visualizar proporção, estilo e pontos de caimento. O tecido, o corte e a foto original podem mudar o resultado real."
+        />
+
+        <InfoPill label="Prévia estimada" tone="gold" />
 
         {resultImageUrl ? (
           <Image
             source={{ uri: resultImageUrl }}
-            style={{ width: "100%", height: 480, borderRadius: 14, backgroundColor: "#170b25" }}
+            style={{ width: "100%", height: 480, borderRadius: 18, backgroundColor: "#170b25" }}
             resizeMode="contain"
           />
         ) : (
-          <View style={{ backgroundColor: "#2d1b3a", padding: 24, borderRadius: 12 }}>
-            <Text style={{ color: "#d8c7ff" }}>Nenhuma imagem gerada.</Text>
-          </View>
+          <FashionCard>
+            <Text style={{ color: fashionColors.textSoft }}>Nenhuma imagem foi gerada para este look.</Text>
+          </FashionCard>
         )}
 
-        <InfoCard title="Execução">
-          <InfoLine label="Provider" value={result.provider} />
-          <InfoLine label="Modo pedido" value={result.mode_requested} />
-          <InfoLine label="Fallback usado" value={result.used_fallback ? "sim" : "não"} />
-          <InfoLine label="Sucesso" value={result.success ? "sim" : "não"} />
-          <InfoLine label="Mensagem" value={result.message} />
-        </InfoCard>
+        <FashionCard highlighted>
+          <Text style={{ color: fashionColors.text, fontWeight: "900", fontSize: 18 }}>
+            Resumo do caimento
+          </Text>
+          <Text style={{ color: fashionColors.textSoft, lineHeight: 22 }}>
+            {fitSummary}
+          </Text>
 
-        {(source && (source.product_url || source.affiliate_url || source.source_name)) && (
-          <InfoCard title="Origem">
-            <InfoLine label="Loja / Fonte" value={source.source_name ?? "-"} />
-            <InfoLine label="URL" value={source.product_url ?? "-"} />
-            <InfoLine label="Affiliate" value={source.affiliate_url ?? "-"} />
-          </InfoCard>
-        )}
-
-        {(source && (source.product_title || source.product_url || source.affiliate_url)) && (
-          <InfoCard title="Produto">
-            <InfoLine label="Produto" value={source.product_title ?? "Produto sem título"} />
-            <InfoLine label="Loja" value={source.source_name ?? "-"} />
-            <InfoLine label="URL original" value={source.product_url ?? "-"} />
-            <InfoLine label="URL afiliada" value={source.affiliate_url ?? "-"} />
-
-            <View style={{ marginTop: 8 }}>
-              <TouchableOpacity
-                onPress={buy}
-                disabled={!buyUrl}
-                style={{
-                  backgroundColor: buyUrl ? "#7c3aed" : "#37303b",
-                  padding: 12,
-                  borderRadius: 10,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ color: "white", fontWeight: "800" }}>{buyUrl ? "Comprar" : "Comprar (indisponível)"}</Text>
-              </TouchableOpacity>
+          {fitZones.length > 0 ? (
+            <View style={{ gap: 8 }}>
+              {fitZones.map((z) => (
+                <View
+                  key={z.zone}
+                  style={{
+                    backgroundColor: "#2d1640",
+                    padding: 10,
+                    borderRadius: 12,
+                    borderLeftWidth: 6,
+                    borderLeftColor: colorToHex(z.color),
+                  }}
+                >
+                  <Text style={{ color: fashionColors.text, fontWeight: "900" }}>{zoneLabel(z.zone)}</Text>
+                  <Text style={{ color: fashionColors.textSoft, lineHeight: 20 }}>{humanizeZoneMessage(z)}</Text>
+                </View>
+              ))}
             </View>
-          </InfoCard>
-        )}
+          ) : (
+            <Text style={{ color: fashionColors.textMuted }}>
+              Caimento ainda não avaliado para esta peça.
+            </Text>
+          )}
+        </FashionCard>
 
-        <Text style={{ color: "white", fontSize: 20, fontWeight: "800", marginTop: 4 }}>Card social</Text>
+        {source && (source.product_title || source.source_name || buyUrl) ? (
+          <FashionCard>
+            <Text style={{ color: fashionColors.text, fontWeight: "900", fontSize: 18 }}>
+              Peça
+            </Text>
+            <Text style={{ color: fashionColors.textSoft, lineHeight: 21 }}>
+              {source.product_title ?? "Produto sem título"}
+              {source.source_name ? `\n${source.source_name}` : ""}
+            </Text>
+            <PrimaryButton label={buyUrl ? "Ver na loja" : "Link indisponível"} onPress={buy} disabled={!buyUrl} />
+          </FashionCard>
+        ) : null}
+
+        <Text style={{ color: fashionColors.text, fontSize: 20, fontWeight: "900", marginTop: 4 }}>
+          Card para compartilhar
+        </Text>
         <ViewShot
           ref={cardRef}
           options={{ format: "png", quality: 1, result: "tmpfile" }}
@@ -271,49 +207,107 @@ export function VtonResultScreen({
             title={source?.product_title ?? "Meu look virtual"}
             sourceName={source?.source_name ?? null}
             productTitle={source?.product_title ?? null}
-            fitSummary={buildFitSummary(fitZones)}
-            provider={result.provider}
-            usedFallback={result.used_fallback}
+            fitSummary={fitSummary}
           />
         </ViewShot>
 
-        <TouchableOpacity onPress={shareCard} style={{ backgroundColor: "#10b981", padding: 14, borderRadius: 12, alignItems: "center" }}>
-          <Text style={{ color: "white", fontWeight: "800" }}>Compartilhar card do look</Text>
-        </TouchableOpacity>
-
-        <InfoCard title="Resumo de caimento">
-          <Text style={{ color: "#d8c7ff", marginBottom: 8 }}>{fitZones.length} zonas avaliadas</Text>
-
-          {fitZones.map((z) => (
-            <View key={z.zone} style={{ backgroundColor: "#2d1640", padding: 10, borderRadius: 12, marginBottom: 8, borderLeftWidth: 6, borderLeftColor: colorToHex(z.color) }}>
-              <Text style={{ color: "white", fontWeight: "800" }}>{zoneLabel(z.zone)}</Text>
-              <Text style={{ color: "#d8c7ff" }}>{z.message}</Text>
-            </View>
-          ))}
-        </InfoCard>
-
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <TouchableOpacity onPress={handleSave} style={{ flex: 1, backgroundColor: "#8b5cf6", padding: 14, borderRadius: 12, alignItems: "center" }}>
-            <Text style={{ color: "white", fontWeight: "800" }}>Salvar look</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleShare} style={{ flex: 1, backgroundColor: "#3b82f6", padding: 14, borderRadius: 12, alignItems: "center" }}>
-            <Text style={{ color: "white", fontWeight: "800" }}>Compartilhar</Text>
-          </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <PrimaryButton label="Salvar look" onPress={handleSave} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <PrimaryButton label="Compartilhar" onPress={handleShare} tone="secondary" />
+          </View>
         </View>
 
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <TouchableOpacity onPress={onOpenHistory} style={{ flex: 1, backgroundColor: "#6b7280", padding: 12, borderRadius: 12, alignItems: "center" }}>
-            <Text style={{ color: "white", fontWeight: "800" }}>Histórico</Text>
-          </TouchableOpacity>
+        <PrimaryButton label="Compartilhar card" onPress={shareCard} tone="success" />
 
-          <TouchableOpacity onPress={onBackToVton} style={{ flex: 1, backgroundColor: "#374151", padding: 12, borderRadius: 12, alignItems: "center" }}>
-            <Text style={{ color: "white", fontWeight: "800" }}>Voltar ao VTON</Text>
-          </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <SecondaryButton label="Histórico" onPress={onOpenHistory} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <SecondaryButton label="Experimentar outra prévia" onPress={onBackToVton} />
+          </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </AppScreen>
   );
+}
+
+function colorToHex(color: string): string {
+  switch (color) {
+    case "red":
+      return "#ef4444";
+    case "yellow":
+      return "#facc15";
+    case "green":
+      return "#22c55e";
+    case "blue":
+      return "#38bdf8";
+    case "gray":
+      return "#9ca3af";
+    default:
+      return "#8b5cf6";
+  }
+}
+
+function zoneLabel(zone: string): string {
+  switch (zone) {
+    case "chest":
+      return "Busto/tórax";
+    case "waist":
+      return "Cintura";
+    case "hip":
+      return "Quadril";
+    case "length":
+      return "Comprimento";
+    case "sleeve":
+      return "Manga";
+    case "biceps":
+      return "Bíceps";
+    case "top_length":
+      return "Comprimento superior";
+    case "inseam":
+      return "Entrepernas";
+    case "thigh":
+      return "Coxa";
+    case "shoulder":
+      return "Ombros";
+    default:
+      return zone;
+  }
+}
+
+function buildFitSummary(fitZones: FitZone[]): string {
+  if (fitZones.length === 0) return "Ainda não avaliamos o caimento desta peça.";
+
+  const lowEase = fitZones.filter((zone) =>
+    zone.status === "apertado" || zone.status === "too_small" || zone.status === "tight" || zone.color === "red"
+  ).length;
+
+  const close = fitZones.filter((zone) =>
+    zone.status === "justo" || zone.status === "balanced" || zone.color === "yellow"
+  ).length;
+
+  const relaxed = fitZones.filter((zone) =>
+    zone.status === "folgado" || zone.status === "loose" || zone.color === "green" || zone.color === "blue"
+  ).length;
+
+  if (lowEase > 0) return "Algumas regiões podem ter pouca folga. Vale conferir tecido, elasticidade e sua preferência de caimento.";
+  if (close > 0) return "A peça tende a ficar mais próxima ao corpo em algumas regiões.";
+  if (relaxed > 0) return "A peça tende a ter folga confortável na maior parte do look.";
+
+  return "Caimento estimado com as medidas disponíveis.";
+}
+
+function humanizeZoneMessage(zone: FitZone): string {
+  if (zone.color === "red") return "Pode ter pouca folga nessa região.";
+  if (zone.color === "yellow") return "Deve ficar mais próximo ao corpo.";
+  if (zone.color === "green") return "Tende a ter folga confortável.";
+  if (zone.color === "blue") return "Tende a ficar mais solto.";
+  if (zone.color === "gray") return "A loja não informou medida suficiente para esta região.";
+  return zone.message;
 }
 
 export default VtonResultScreen;

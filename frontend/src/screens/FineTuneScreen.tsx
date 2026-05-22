@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from "react";
+import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import {
-  Alert,
-  SafeAreaView,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+  AppScreen,
+  FashionCard,
+  MeasurementInput,
+  PrimaryButton,
+  StepHeader,
+  fashionColors,
+} from "../components/FashionUI";
 import { BodyModel, FineTuneInput, InitialBodyInput } from "../types/body";
 
 type Props = {
@@ -16,7 +16,12 @@ type Props = {
   onSubmit: (data: FineTuneInput) => void;
 };
 
-const skinTones = ["light", "medium", "dark", "deep"];
+const skinTones = [
+  { value: "light", label: "Claro", color: "#f2c7a5" },
+  { value: "medium", label: "Médio", color: "#c6865a" },
+  { value: "dark", label: "Escuro", color: "#6b3f2a" },
+  { value: "deep", label: "Profundo", color: "#3a241c" },
+];
 
 export function FineTuneScreen({ initial, selectedModel, onSubmit }: Props) {
   const [chest, setChest] = useState("95");
@@ -29,6 +34,8 @@ export function FineTuneScreen({ initial, selectedModel, onSubmit }: Props) {
   const [thigh, setThigh] = useState("");
   const [topLength, setTopLength] = useState("");
   const [skinTone, setSkinTone] = useState("medium");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   const estimates = useMemo(
     () =>
       estimateAdvancedMeasurements({
@@ -64,7 +71,7 @@ export function FineTuneScreen({ initial, selectedModel, onSubmit }: Props) {
     };
 
     if (!data.chest_cm || !data.waist_cm || !data.hip_cm) {
-      Alert.alert("Dados incompletos", "Preencha busto/tórax, cintura e quadril.");
+      Alert.alert("Faltam medidas essenciais", "Preencha busto/tórax, cintura e quadril para montar seu provador.");
       return;
     }
 
@@ -72,76 +79,93 @@ export function FineTuneScreen({ initial, selectedModel, onSubmit }: Props) {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f" }}>
+    <AppScreen>
       <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
-        <Text style={{ color: "white", fontSize: 28, fontWeight: "800" }}>
-          Ajuste fino
-        </Text>
+        <StepHeader
+          eyebrow="Medidas"
+          step="3 de 5"
+          title="Refinar medidas"
+          subtitle={`Base escolhida: ${selectedModel.label}. Confirme as medidas principais; o restante pode ficar como estimativa e ser ajustado depois.`}
+        />
 
-        <Text style={{ color: "#d8c7ff", fontSize: 15 }}>
-          Modelo base: {selectedModel.label}
-        </Text>
-
-        <Text style={{ color: "#bca7df", fontSize: 13 }}>
-          Caminho rapido: confirme busto, cintura e quadril. O restante fica estimado e editavel.
-        </Text>
-
-        <Input label="Busto/Tórax em cm" value={chest} onChangeText={setChest} />
-        <Input label="Cintura em cm" value={waist} onChangeText={setWaist} />
-        <Input label="Quadril em cm" value={hip} onChangeText={setHip} />
-
-        <View style={{ backgroundColor: "#21102f", borderRadius: 16, padding: 14, gap: 10, borderWidth: 1, borderColor: "#4c2a69" }}>
-          <Text style={{ color: "white", fontWeight: "800", fontSize: 16 }}>
-            Medidas avançadas
+        <FashionCard highlighted>
+          <Text style={{ color: fashionColors.text, fontWeight: "900", fontSize: 16 }}>
+            Medidas essenciais
           </Text>
-          <Text style={{ color: "#c4b5fd", fontSize: 13 }}>
-            Use uma fita sem apertar o corpo. Bíceps mede a parte mais larga do braço; entrepernas vai da virilha ao tornozelo.
+          <Text style={{ color: fashionColors.textSoft, lineHeight: 21 }}>
+            Use a fita sem apertar o corpo. Essas medidas ajudam o app a estimar proporção e caimento, sem julgamento.
           </Text>
-          <Text style={{ color: "#facc15", fontSize: 12, opacity: 0.78 }}>
-            Estimativas IA: ombros {estimates.shoulder} cm, manga {estimates.sleeve} cm, biceps {estimates.biceps} cm, entrepernas {estimates.inseam} cm, coxa {estimates.thigh} cm.
-          </Text>
-          <Input label="Ombros em cm" value={shoulder} onChangeText={setShoulder} hint="Passe a fita de um ossinho do ombro ao outro." estimatedValue={estimates.shoulder} />
-          <Input label="Manga/braço em cm" value={sleeve} onChangeText={setSleeve} hint="Do ossinho do ombro ao pulso." />
-          <Input label="Bíceps em cm" value={biceps} onChangeText={setBiceps} hint="Circunferência da parte mais larga do braço." />
-          <Input label="Comprimento superior em cm" value={topLength} onChangeText={setTopLength} hint="Do ombro até a barra de uma blusa." />
-          <Input label="Entrepernas em cm" value={inseam} onChangeText={setInseam} hint="Da virilha até o tornozelo." />
-          <Input label="Coxa em cm" value={thigh} onChangeText={setThigh} hint="Circunferência da parte alta da coxa." />
+        </FashionCard>
+
+        <MeasurementInput label="Busto ou tórax" value={chest} onChangeText={setChest} />
+        <MeasurementInput label="Cintura" value={waist} onChangeText={setWaist} />
+        <MeasurementInput label="Quadril" value={hip} onChangeText={setHip} />
+
+        <FashionCard>
+          <TouchableOpacity
+            onPress={() => setAdvancedOpen((value) => !value)}
+            style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}
+          >
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={{ color: fashionColors.text, fontWeight: "900", fontSize: 16 }}>
+                Refinar mais medidas
+              </Text>
+              <Text style={{ color: fashionColors.textSoft, lineHeight: 20 }}>
+                Opcional. Ajuda em mangas, calças, vestidos e peças ajustadas.
+              </Text>
+            </View>
+            <Text style={{ color: fashionColors.gold, fontWeight: "900" }}>
+              {advancedOpen ? "Fechar" : "Abrir"}
+            </Text>
+          </TouchableOpacity>
+
+          {!advancedOpen ? (
+            <Text style={{ color: fashionColors.textMuted, fontSize: 12, lineHeight: 18 }}>
+              Estimativas iniciais: ombros {estimates.shoulder} cm, manga {estimates.sleeve} cm, bíceps {estimates.biceps} cm, entrepernas {estimates.inseam} cm, coxa {estimates.thigh} cm.
+            </Text>
+          ) : null}
+
+          {advancedOpen ? (
+            <View style={{ gap: 14 }}>
+              <MeasurementInput label="Ombros" value={shoulder} onChangeText={setShoulder} hint="Meça de um ossinho do ombro ao outro." estimatedValue={estimates.shoulder} />
+              <MeasurementInput label="Comprimento da manga" value={sleeve} onChangeText={setSleeve} hint="Do ossinho do ombro ao pulso." estimatedValue={estimates.sleeve} />
+              <MeasurementInput label="Bíceps" value={biceps} onChangeText={setBiceps} hint="Circunferência da parte mais larga do braço." estimatedValue={estimates.biceps} />
+              <MeasurementInput label="Comprimento superior" value={topLength} onChangeText={setTopLength} hint="Do ombro até a barra de uma blusa." estimatedValue={estimates.topLength} />
+              <MeasurementInput label="Entrepernas" value={inseam} onChangeText={setInseam} hint="Da virilha até o tornozelo." estimatedValue={estimates.inseam} />
+              <MeasurementInput label="Coxa" value={thigh} onChangeText={setThigh} hint="Circunferência da parte alta da coxa." estimatedValue={estimates.thigh} />
+            </View>
+          ) : null}
+        </FashionCard>
+
+        <View style={{ gap: 10 }}>
+          <Text style={{ color: fashionColors.text, fontWeight: "900" }}>Tom visual do manequim</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {skinTones.map((tone) => (
+              <TouchableOpacity
+                key={tone.value}
+                onPress={() => setSkinTone(tone.value)}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  borderRadius: 14,
+                  backgroundColor: skinTone === tone.value ? fashionColors.primary : "#241233",
+                  borderWidth: 1,
+                  borderColor: skinTone === tone.value ? "#c4b5fd" : fashionColors.border,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: tone.color }} />
+                <Text style={{ color: fashionColors.text, fontWeight: "800" }}>{tone.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
-        <Text style={{ color: "white", fontWeight: "800" }}>Tom de pele</Text>
-
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          {skinTones.map((tone) => (
-            <TouchableOpacity
-              key={tone}
-              onPress={() => setSkinTone(tone)}
-              style={{
-                paddingVertical: 10,
-                paddingHorizontal: 12,
-                borderRadius: 14,
-                backgroundColor: skinTone === tone ? "#8b5cf6" : "#241233",
-              }}
-            >
-              <Text style={{ color: "white" }}>{tone}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <TouchableOpacity
-          onPress={submit}
-          style={{
-            backgroundColor: "#8b5cf6",
-            padding: 16,
-            borderRadius: 18,
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "white", fontSize: 16, fontWeight: "700" }}>
-            Gerar manequim 3D
-          </Text>
-        </TouchableOpacity>
+        <PrimaryButton label="Montar meu provador" onPress={submit} />
       </ScrollView>
-    </SafeAreaView>
+    </AppScreen>
   );
 }
 
@@ -168,44 +192,4 @@ function clamp(value: number, min: number, max: number): number {
 
 function round(value: number): number {
   return Math.round(value * 10) / 10;
-}
-
-function Input(props: {
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  hint?: string;
-  estimatedValue?: number;
-}) {
-  const isEstimated = !props.value && props.estimatedValue != null;
-
-  return (
-    <View style={{ gap: 6, opacity: isEstimated ? 0.72 : 1 }}>
-      <Text style={{ color: "#f5edff", fontWeight: "700" }}>{props.label}</Text>
-      {isEstimated ? (
-        <Text style={{ color: "#facc15", fontSize: 12, fontWeight: "700" }}>
-          Estimativa da IA: {props.estimatedValue} cm. Toque para ajustar.
-        </Text>
-      ) : null}
-      {props.hint ? (
-        <Text style={{ color: "#bca7df", fontSize: 12 }}>{props.hint}</Text>
-      ) : null}
-
-      <TextInput
-        value={props.value}
-        onChangeText={props.onChangeText}
-        keyboardType="numeric"
-        placeholder={props.estimatedValue != null ? String(props.estimatedValue) : undefined}
-        placeholderTextColor="#9b86b8"
-        style={{
-          backgroundColor: "#241233",
-          color: "white",
-          padding: 14,
-          borderRadius: 14,
-          borderWidth: 1,
-          borderColor: "#6d35b8",
-        }}
-      />
-    </View>
-  );
 }

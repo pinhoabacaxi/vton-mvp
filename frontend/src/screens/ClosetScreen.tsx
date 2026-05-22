@@ -143,7 +143,7 @@ export default function ClosetScreen({
                 )}
 
                 <Text style={{ color: "#d8c7ff", fontWeight: "700" }}>
-                  Usar esta peca no Fit Check
+                  Ver caimento desta peca
                 </Text>
               </TouchableOpacity>
             );

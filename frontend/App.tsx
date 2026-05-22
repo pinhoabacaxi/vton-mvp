@@ -1,4 +1,4 @@
-import "react-native-gesture-handler";
+﻿import "react-native-gesture-handler";
 import React, { useState, useEffect } from "react";
 import { ActivityIndicator, Alert, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -160,7 +160,7 @@ export default function App() {
       setRecommendation(rec);
       navigation.navigate("SelectModel");
     } catch (err) {
-      Alert.alert("Erro", err instanceof Error ? err.message : "Erro ao recomendar modelos");
+      Alert.alert("Não conseguimos sugerir silhuetas", err instanceof Error ? err.message : "Tente novamente em instantes.");
     } finally {
       setLoading(false);
     }
@@ -186,7 +186,7 @@ export default function App() {
       }
       navigation.navigate("Preview");
     } catch (err) {
-      Alert.alert("Erro", err instanceof Error ? err.message : "Erro ao gerar manequim");
+      Alert.alert("Não conseguimos montar o provador", err instanceof Error ? err.message : "Tente novamente em instantes.");
     } finally {
       setLoading(false);
     }
@@ -196,9 +196,9 @@ export default function App() {
     try {
       const look = createSavedLook({ ...input, source: input.source ?? productSource ?? null });
       await addLook(look);
-      Alert.alert("Salvo", "Look salvo no histórico local.");
+      Alert.alert("Look salvo", "Ele foi adicionado ao seu histórico.");
     } catch (error) {
-      Alert.alert("Erro ao salvar histórico", error instanceof Error ? error.message : "Erro inesperado");
+      Alert.alert("Não foi possível salvar", error instanceof Error ? error.message : "Tente novamente em instantes.");
     }
   }
 
@@ -248,7 +248,7 @@ export default function App() {
                 />
               ) : (
                 <MissingFlowScreen
-                  message="Recomendação ausente. Retorne ao início para calcular seu corpo."
+                  message="Não encontramos sua sugestão de silhueta. Volte ao início para recomeçar com calma."
                   onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
                 />
               )
@@ -265,7 +265,7 @@ export default function App() {
                 />
               ) : (
                 <MissingFlowScreen
-                  message="Dados do corpo ausentes. Volte ao início para refazer as medidas."
+                  message="Seu perfil ainda não está completo. Volte ao início para refazer as medidas."
                   onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
                 />
               )
@@ -307,7 +307,7 @@ export default function App() {
                             <Text
                               style={{ color: "#d8c7ff", fontWeight: "700" }}
                             >
-                              Produto:
+                              Peça:
                             </Text>
                             <Text style={{ color: "#c4b5fd" }}>{productUrl ?? "Nenhum"}</Text>
                           </View>
@@ -321,7 +321,7 @@ export default function App() {
                           onPress={() => props.navigation.navigate("ProductUrl")}
                           style={{ backgroundColor: "#6b7280", padding: 12, borderRadius: 10, alignItems: "center" }}
                         >
-                          <Text style={{ color: "white", fontWeight: "800" }}>URL do produto</Text>
+                          <Text style={{ color: "white", fontWeight: "800" }}>Adicionar por link</Text>
                         </TouchableOpacity>
                       </View>
 
@@ -330,7 +330,7 @@ export default function App() {
                           onPress={() => props.navigation.navigate("GarmentUpload")}
                           style={{ backgroundColor: "#8b5cf6", padding: 12, borderRadius: 10, alignItems: "center" }}
                         >
-                          <Text style={{ color: "white", fontWeight: "800" }}>Upload da peça</Text>
+                          <Text style={{ color: "white", fontWeight: "800" }}>Enviar foto</Text>
                         </TouchableOpacity>
                       </View>
 
@@ -339,7 +339,7 @@ export default function App() {
                           onPress={() => props.navigation.navigate("FitCheck")}
                           style={{ backgroundColor: "#3b82f6", padding: 12, borderRadius: 10, alignItems: "center" }}
                         >
-                          <Text style={{ color: "white", fontWeight: "800" }}>Fit Check</Text>
+                          <Text style={{ color: "white", fontWeight: "800" }}>Ver caimento</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -347,7 +347,7 @@ export default function App() {
                 </SafeAreaView>
               ) : (
                 <MissingFlowScreen
-                  message="Manequim ausente. Volte ao início para refazer o cálculo de corpo."
+                  message="Seu provador ainda não está pronto. Volte ao início para montar novamente."
                   onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
                 />
               )
@@ -410,7 +410,7 @@ export default function App() {
                 />
               ) : (
                 <MissingFlowScreen
-                  message="Manequim necessário para o Fit Check. Retorne ao início."
+                  message="Monte seu provador antes de ver o caimento da peça."
                   onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
                 />
               )
@@ -434,7 +434,7 @@ export default function App() {
                 />
               ) : (
                 <MissingFlowScreen
-                  message="Dados insuficientes para VTON. Reinicie a jornada."
+                  message="Faltam dados para gerar a prévia do look. Reinicie a jornada."
                   onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
                 />
               )
@@ -458,7 +458,7 @@ export default function App() {
                 />
               ) : (
                 <MissingFlowScreen
-                  message="Resultado VTON indisponível. Volte ao fluxo e gere um novo look."
+                  message="Ainda não há uma prévia pronta. Volte ao fluxo e gere um novo look."
                   onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
                 />
               )
@@ -491,7 +491,7 @@ export default function App() {
                 />
               ) : (
                 <MissingFlowScreen
-                  message="Manequim necessario para usar o armario. Volte ao inicio."
+                  message="Monte seu provador para usar o armário."
                   onRestart={() => props.navigation.reset({ index: 0, routes: [{ name: "Measurements" }] })}
                 />
               )

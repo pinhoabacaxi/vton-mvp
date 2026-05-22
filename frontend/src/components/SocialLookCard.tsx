@@ -7,8 +7,6 @@ type Props = {
   sourceName?: string | null;
   productTitle?: string | null;
   fitSummary?: string | null;
-  provider?: string | null;
-  usedFallback?: boolean;
 };
 
 export function SocialLookCard({
@@ -17,8 +15,6 @@ export function SocialLookCard({
   sourceName,
   productTitle,
   fitSummary,
-  provider,
-  usedFallback,
 }: Props) {
   return (
     <View style={styles.card}>
@@ -48,26 +44,16 @@ export function SocialLookCard({
         ) : null}
 
         {fitSummary ? (
-          <Text style={styles.metaLine} numberOfLines={2}>
+          <Text style={styles.metaLine} numberOfLines={3}>
             <Text style={styles.metaLabel}>Caimento: </Text>
             {fitSummary}
           </Text>
         ) : null}
-
-        <Text style={styles.metaLine} numberOfLines={1}>
-          <Text style={styles.metaLabel}>Provider: </Text>
-          {provider ?? "desconhecido"}
-        </Text>
-
-        <Text style={styles.metaLine} numberOfLines={1}>
-          <Text style={styles.metaLabel}>Fallback/mock: </Text>
-          {usedFallback ? "sim" : "não"}
-        </Text>
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Criado com VTON MVP</Text>
-        <Text style={styles.ctaText}>Experimente virtualmente</Text>
+        <Text style={styles.footerText}>Prévia visual estimada</Text>
+        <Text style={styles.ctaText}>Meu provador virtual</Text>
       </View>
     </View>
   );

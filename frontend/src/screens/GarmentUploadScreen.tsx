@@ -1,16 +1,17 @@
 import React, { useState } from "react";
-import {
-  Alert,
-  Image,
-  SafeAreaView,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, Image, ScrollView, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { resolveApiUrl, uploadGarmentImage } from "../api/client";
+import {
+  AppScreen,
+  FashionCard,
+  InfoPill,
+  PrimaryButton,
+  SecondaryButton,
+  StepHeader,
+  fashionColors,
+} from "../components/FashionUI";
 import { GarmentUploadResult } from "../types/product";
 
 type Props = {
@@ -28,7 +29,7 @@ export function GarmentUploadScreen({ onContinue, onUploadComplete }: Props) {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Permissão necessária", "Permita acesso às imagens.");
+      Alert.alert("Permissão necessária", "Permita acesso às imagens para escolher uma foto da peça.");
       return;
     }
 
@@ -50,7 +51,7 @@ export function GarmentUploadScreen({ onContinue, onUploadComplete }: Props) {
 
   async function upload() {
     if (!imageUri) {
-      Alert.alert("Selecione uma imagem", "Escolha uma foto da roupa primeiro.");
+      Alert.alert("Escolha uma foto", "Use uma imagem com a peça inteira, de preferência em fundo claro.");
       return;
     }
 
@@ -73,8 +74,8 @@ export function GarmentUploadScreen({ onContinue, onUploadComplete }: Props) {
       setConfirmed(false);
     } catch (error) {
       Alert.alert(
-        "Erro no upload",
-        error instanceof Error ? error.message : "Erro inesperado"
+        "Não conseguimos preparar a imagem",
+        error instanceof Error ? error.message : "Tente uma foto mais nítida, com bom contraste."
       );
     } finally {
       setLoading(false);
@@ -95,8 +96,8 @@ export function GarmentUploadScreen({ onContinue, onUploadComplete }: Props) {
       setConfirmed(true);
     } catch (error) {
       Alert.alert(
-        "Erro ao salvar peca",
-        error instanceof Error ? error.message : "Erro inesperado"
+        "Não foi possível salvar a peça",
+        error instanceof Error ? error.message : "Tente novamente em instantes."
       );
     }
   }
@@ -105,38 +106,22 @@ export function GarmentUploadScreen({ onContinue, onUploadComplete }: Props) {
   const originalUrl = resolveApiUrl(result?.original_url);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f" }}>
+    <AppScreen>
       <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
-        <Text style={{ color: "white", fontSize: 28, fontWeight: "800" }}>
-          Upload da roupa
-        </Text>
+        <StepHeader
+          eyebrow="Peça"
+          step="4 de 5"
+          title="Enviar foto da peça"
+          subtitle="Use uma foto frontal da roupa, com boa luz e fundo contrastante. Vamos preparar a imagem para a prévia do look."
+        />
 
-        <Text style={{ color: "#d8c7ff", fontSize: 15 }}>
-          Envie uma foto plana da peça. O backend salvará a imagem e removerá o fundo.
-        </Text>
+        <PrimaryButton label="Escolher foto da peça" onPress={pickImage} tone="secondary" />
 
-        <TouchableOpacity
-          onPress={pickImage}
-          style={{
-            backgroundColor: "#241233",
-            borderColor: "#6d35b8",
-            borderWidth: 1,
-            padding: 16,
-            borderRadius: 18,
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "white", fontWeight: "800" }}>
-            Escolher imagem
-          </Text>
-        </TouchableOpacity>
-
-        {imageUri && (
-          <View style={{ gap: 8 }}>
-            <Text style={{ color: "white", fontWeight: "800" }}>
-              Imagem selecionada
+        {imageUri ? (
+          <FashionCard>
+            <Text style={{ color: fashionColors.text, fontWeight: "900" }}>
+              Foto escolhida
             </Text>
-
             <Image
               source={{ uri: imageUri }}
               style={{
@@ -147,151 +132,80 @@ export function GarmentUploadScreen({ onContinue, onUploadComplete }: Props) {
               }}
               resizeMode="contain"
             />
-          </View>
-        )}
+          </FashionCard>
+        ) : null}
 
-        <TouchableOpacity
+        <PrimaryButton
+          label={loading ? "Preparando imagem..." : "Preparar imagem da peça"}
           onPress={upload}
-          disabled={loading}
-          style={{
-            backgroundColor: loading ? "#5b3d87" : "#8b5cf6",
-            padding: 16,
-            borderRadius: 18,
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "white", fontWeight: "800" }}>
-            {loading ? "Processando..." : "Enviar e remover fundo"}
-          </Text>
-        </TouchableOpacity>
+          loading={loading}
+          disabled={!imageUri}
+        />
 
-        {result && (
-          <View
-            style={{
-              backgroundColor: "#21102f",
-              borderRadius: 18,
-              padding: 14,
-              gap: 12,
-              borderWidth: 1,
-              borderColor: "#4c2a69",
-            }}
-          >
-            <Text style={{ color: "white", fontWeight: "800", fontSize: 18 }}>
-              A roupa ficou assim
+        {result ? (
+          <FashionCard highlighted>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <Text style={{ color: fashionColors.text, fontWeight: "900", fontSize: 18, flex: 1 }}>
+                A peça ficou assim
+              </Text>
+              <InfoPill
+                label={result.background_removed ? "Recorte aplicado" : "Imagem otimizada"}
+                tone={result.background_removed ? "gold" : "neutral"}
+              />
+            </View>
+
+            <Text style={{ color: fashionColors.textSoft, lineHeight: 21 }}>
+              Confira se mangas, barras e detalhes escuros continuam visíveis. Se algo sumiu, tente uma foto com fundo mais claro ou mais contraste.
             </Text>
 
-            <Text style={{ color: "#d8c7ff" }}>
-              {result.message}
-            </Text>
-
-            <Text style={{ color: "#d8c7ff" }}>
-              Fundo removido: {result.background_removed ? "sim" : "não"}
-            </Text>
-
-            {originalUrl && (
-              <View style={{ gap: 8 }}>
-                <Text style={{ color: "white", fontWeight: "800" }}>
-                  Original salva no backend
-                </Text>
-
+            {processedUrl ? (
+              <View
+                style={{
+                  width: "100%",
+                  height: 300,
+                  borderRadius: 18,
+                  backgroundColor: "#f3e8ff",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
+                }}
+              >
                 <Image
-                  source={{ uri: originalUrl }}
-                  style={{
-                    width: "100%",
-                    height: 240,
-                    borderRadius: 18,
-                    backgroundColor: "#241233",
-                  }}
+                  source={{ uri: processedUrl }}
+                  style={{ width: "100%", height: "100%" }}
                   resizeMode="contain"
                 />
               </View>
-            )}
+            ) : null}
 
-            {processedUrl && (
-              <View style={{ gap: 8 }}>
-                <Text style={{ color: "white", fontWeight: "800" }}>
-                  Roupa sem fundo
-                </Text>
-
-                <View
-                  style={{
-                    width: "100%",
-                    height: 280,
-                    borderRadius: 18,
-                    backgroundColor: "#f3e8ff",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    overflow: "hidden",
-                  }}
-                >
-                  <Image
-                    source={{ uri: processedUrl }}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                    }}
-                    resizeMode="contain"
-                  />
-                </View>
-              </View>
-            )}
+            {originalUrl && !processedUrl ? (
+              <Image
+                source={{ uri: originalUrl }}
+                style={{
+                  width: "100%",
+                  height: 260,
+                  borderRadius: 18,
+                  backgroundColor: "#241233",
+                }}
+                resizeMode="contain"
+              />
+            ) : null}
 
             {!confirmed ? (
-              <View style={{ gap: 10 }}>
-                <Text style={{ color: "#fef3c7" }}>
-                  Confira se a silhueta nao perdeu mangas, barras ou detalhes escuros. Se o recorte falhou, use outra foto com fundo mais contrastante.
-                </Text>
-
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <TouchableOpacity
-                    onPress={rejectResult}
-                    style={{
-                      flex: 1,
-                      backgroundColor: "#450a0a",
-                      padding: 14,
-                      borderRadius: 16,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: "#fecaca", fontWeight: "800" }}>
-                      Refazer
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={acceptResult}
-                    style={{
-                      flex: 1,
-                      backgroundColor: "#16a34a",
-                      padding: 14,
-                      borderRadius: 16,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: "white", fontWeight: "800" }}>
-                      Usar peca
-                    </Text>
-                  </TouchableOpacity>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <SecondaryButton label="Refazer foto" onPress={rejectResult} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <PrimaryButton label="Usar esta peça" onPress={acceptResult} tone="success" />
                 </View>
               </View>
             ) : (
-              <TouchableOpacity
-                onPress={onContinue}
-                style={{
-                  backgroundColor: "#8b5cf6",
-                  padding: 14,
-                  borderRadius: 16,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ color: "white", fontWeight: "800" }}>
-                  Continuar para Fit Check
-                </Text>
-              </TouchableOpacity>
+              <PrimaryButton label="Ver caimento" onPress={onContinue} />
             )}
-          </View>
-        )}
+          </FashionCard>
+        ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </AppScreen>
   );
 }

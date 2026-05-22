@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -104,7 +104,7 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
     );
 
     if (!hasAnyMeasurement) {
-      Alert.alert("Medidas incompletas", "Preencha pelo menos uma medida da peça.");
+      Alert.alert("Faltam medidas da peça", "Preencha pelo menos uma medida informada pela loja ou siga com uma estimativa.");
       return;
     }
 
@@ -143,8 +143,8 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
       onFitComplete?.(resultForSize(response, bestLabel) ?? response);
     } catch (error) {
       Alert.alert(
-        "Erro no Fit Check",
-        error instanceof Error ? error.message : "Erro inesperado"
+        "Não conseguimos calcular o caimento",
+        error instanceof Error ? error.message : "Tente novamente em instantes."
       );
     } finally {
       setLoading(false);
@@ -155,11 +155,11 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
     <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f" }}>
       <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
         <Text style={{ color: "white", fontSize: 28, fontWeight: "800" }}>
-          Fit Check
+          Como pode vestir
         </Text>
 
         <Text style={{ color: "#d8c7ff", fontSize: 15 }}>
-          Compare suas medidas com as medidas da peça e veja o mapa de caimento no manequim.
+          Compare a peça com seu provador e veja uma estimativa visual de folga, proporção e conforto.
         </Text>
 
         <Mannequin3D params={mannequin} fitZones={displayResult?.zones} />
@@ -212,7 +212,7 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
             ]}
             onChange={setStretchLevel}
           />
-          <Input label="Busto/Tórax da peça em cm" value={chest} onChangeText={setChest} />
+          <Input label="Busto/tórax da peça em cm" value={chest} onChangeText={setChest} />
           <Input label="Cintura da peça em cm" value={waist} onChangeText={setWaist} />
           <Input label="Quadril da peça em cm" value={hip} onChangeText={setHip} />
           <Input label="Comprimento total em cm" value={length} onChangeText={setLength} />
@@ -236,7 +236,7 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
               <ActivityIndicator color="white" />
             ) : (
               <Text style={{ color: "white", fontWeight: "800" }}>
-                Calcular caimento
+                Ver caimento
               </Text>
             )}
           </TouchableOpacity>
@@ -254,7 +254,7 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
             }}
           >
             <Text style={{ color: "white", fontSize: 18, fontWeight: "800" }}>
-              Resultado
+              Resumo de caimento
             </Text>
 
             <Text style={{ color: "#d8c7ff" }}>
@@ -264,7 +264,7 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
             {displayResult.best_size_label ? (
               <View style={{ backgroundColor: "#facc15", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, alignSelf: "flex-start" }}>
                 <Text style={{ color: "#2d1640", fontWeight: "900" }}>
-                  Tamanho Ideal: {displayResult.best_size_label}
+                  Melhor opção: {displayResult.best_size_label}
                 </Text>
               </View>
             ) : null}
@@ -297,8 +297,8 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
                 </Text>
 
                 <Text style={{ color: "#c4b5fd", marginTop: 4 }}>
-                  Delta: {zone.difference_cm ?? "-"} cm
-                  {zone.ease_allowance_cm != null ? ` • Margem: ${zone.ease_allowance_cm} cm` : ""}
+                  Diferença estimada: {zone.difference_cm ?? "-"} cm
+                  {zone.ease_allowance_cm != null ? ` • Margem de conforto: ${zone.ease_allowance_cm} cm` : ""}
                 </Text>
               </View>
             ))}
@@ -313,7 +313,7 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
               }}
             >
               <Text style={{ color: "white", fontWeight: "800" }}>
-                Continuar para VTON
+                Gerar prévia do look
               </Text>
             </TouchableOpacity>
           </View>
@@ -476,11 +476,11 @@ function Legend() {
         Legenda
       </Text>
 
-      <LegendItem color="#ef4444" label="Vermelho: apertado ou pequeno" />
-      <LegendItem color="#f59e0b" label="Amarelo/Laranja: justo" />
-      <LegendItem color="#22c55e" label="Verde: folga confortável" />
-      <LegendItem color="#38bdf8" label="Azul: oversize confortável" />
-      <LegendItem color="#9ca3af" label="Cinza: medida desconhecida" />
+      <LegendItem color="#ef4444" label="Pouca folga: pode ficar mais ajustado" />
+      <LegendItem color="#f59e0b" label="Caimento próximo ao corpo" />
+      <LegendItem color="#22c55e" label="Folga confortável" />
+      <LegendItem color="#38bdf8" label="Caimento solto" />
+      <LegendItem color="#9ca3af" label="Medida não informada pela loja" />
     </View>
   );
 }
@@ -524,7 +524,7 @@ function colorToHex(color: string): string {
 function zoneLabel(zone: string): string {
   switch (zone) {
     case "chest":
-      return "Busto/Tórax";
+      return "Busto/tórax";
     case "waist":
       return "Cintura";
     case "hip":

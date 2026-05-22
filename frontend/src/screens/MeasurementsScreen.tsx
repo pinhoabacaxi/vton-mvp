@@ -1,12 +1,13 @@
 import React, { useState } from "react";
+import { Alert, ScrollView, Text, View } from "react-native";
 import {
-  Alert,
-  SafeAreaView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+  AppScreen,
+  FashionCard,
+  MeasurementInput,
+  PrimaryButton,
+  StepHeader,
+  fashionColors,
+} from "../components/FashionUI";
 import { InitialBodyInput } from "../types/body";
 
 type Props = {
@@ -26,7 +27,15 @@ export function MeasurementsScreen({ onSubmit }: Props) {
     };
 
     if (!data.height_cm || !data.weight_kg || !data.age) {
-      Alert.alert("Dados incompletos", "Preencha altura, peso e idade.");
+      Alert.alert("Faltam alguns dados", "Preencha altura, peso e idade para começarmos.");
+      return;
+    }
+
+    if (data.height_cm < 120 || data.height_cm > 230 || data.weight_kg < 30 || data.weight_kg > 250) {
+      Alert.alert(
+        "Confira os valores",
+        "Use medidas aproximadas e reais para que o provador fique mais parecido com você."
+      );
       return;
     }
 
@@ -34,60 +43,41 @@ export function MeasurementsScreen({ onSubmit }: Props) {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f" }}>
-      <View style={{ padding: 24, gap: 18 }}>
-        <Text style={{ color: "white", fontSize: 30, fontWeight: "800" }}>
-          Crie seu manequim
-        </Text>
+    <AppScreen>
+      <ScrollView contentContainerStyle={{ padding: 24, gap: 18 }}>
+        <StepHeader
+          eyebrow="Provador virtual"
+          step="1 de 5"
+          title="Monte seu provador"
+          subtitle="Vamos criar uma base aproximada para visualizar caimento, proporção e estilo antes de comprar. Você poderá ajustar tudo depois."
+        />
 
-        <Text style={{ color: "#d8c7ff", fontSize: 16 }}>
-          Informe dados básicos para sugerirmos modelos corporais inclusivos e ajustáveis.
-        </Text>
-
-        <Input label="Altura em cm" value={height} onChangeText={setHeight} />
-        <Input label="Peso em kg" value={weight} onChangeText={setWeight} />
-        <Input label="Idade" value={age} onChangeText={setAge} />
-
-        <TouchableOpacity
-          onPress={submit}
-          style={{
-            backgroundColor: "#8b5cf6",
-            padding: 16,
-            borderRadius: 18,
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "white", fontSize: 16, fontWeight: "700" }}>
-            Sugerir modelos
+        <FashionCard highlighted>
+          <Text style={{ color: fashionColors.text, fontWeight: "900", fontSize: 17 }}>
+            Um começo simples
           </Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
-  );
-}
+          <Text style={{ color: fashionColors.textSoft, lineHeight: 21 }}>
+            Nesta etapa usamos apenas dados gerais para sugerir silhuetas de partida. O resultado é uma estimativa visual, não uma medida perfeita do corpo.
+          </Text>
+        </FashionCard>
 
-function Input(props: {
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-}) {
-  return (
-    <View style={{ gap: 6 }}>
-      <Text style={{ color: "#f5edff", fontWeight: "700" }}>{props.label}</Text>
+        <View style={{ gap: 14 }}>
+          <MeasurementInput label="Altura" value={height} onChangeText={setHeight} placeholder="cm" />
+          <MeasurementInput label="Peso aproximado" value={weight} onChangeText={setWeight} placeholder="kg" />
+          <MeasurementInput label="Idade" value={age} onChangeText={setAge} />
+        </View>
 
-      <TextInput
-        value={props.value}
-        onChangeText={props.onChangeText}
-        keyboardType="numeric"
-        style={{
-          backgroundColor: "#241233",
-          color: "white",
-          padding: 14,
-          borderRadius: 14,
-          borderWidth: 1,
-          borderColor: "#6d35b8",
-        }}
-      />
-    </View>
+        <FashionCard>
+          <Text style={{ color: fashionColors.text, fontWeight: "900" }}>
+            Privacidade e controle
+          </Text>
+          <Text style={{ color: fashionColors.textSoft, lineHeight: 21 }}>
+            Suas medidas servem para montar seu provador e podem ser editadas quando quiser. Evitamos linguagem de julgamento: a ideia é encontrar caimento e estilo.
+          </Text>
+        </FashionCard>
+
+        <PrimaryButton label="Ver silhuetas sugeridas" onPress={submit} />
+      </ScrollView>
+    </AppScreen>
   );
 }

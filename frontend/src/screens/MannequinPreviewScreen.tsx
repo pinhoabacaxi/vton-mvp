@@ -1,5 +1,6 @@
 import React from "react";
-import { SafeAreaView, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { FashionCard, InfoPill, StepHeader, fashionColors } from "../components/FashionUI";
 import { Mannequin3D } from "../components/Mannequin3D";
 import { MannequinParams } from "../types/body";
 
@@ -9,26 +10,28 @@ type Props = {
 
 export function MannequinPreviewScreen({ mannequin }: Props) {
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f" }}>
-      <View style={{ padding: 20, gap: 14 }}>
-        <Text style={{ color: "white", fontSize: 28, fontWeight: "800" }}>
-          Seu manequim 3D
-        </Text>
+    <View style={{ gap: 14 }}>
+      <StepHeader
+        eyebrow="Provador"
+        title="Seu provador está pronto"
+        subtitle="Esta é uma base visual estimada para testar proporção, caimento e estilo. Você pode editar as medidas quando quiser."
+      />
 
-        <Text style={{ color: "#d8c7ff" }}>
-          Prévia paramétrica inicial. Depois esta base pode ser trocada por um modelo GLB com morph targets reais.
-        </Text>
+      <InfoPill label="Prévia estimada" tone="gold" />
 
-        <Mannequin3D params={mannequin} />
+      <Mannequin3D params={mannequin} />
 
-        <Text style={{ color: "#d8c7ff" }}>
-          Tórax: {mannequin.chest_cm} cm • Cintura: {mannequin.waist_cm} cm • Quadril: {mannequin.hip_cm} cm
+      <FashionCard>
+        <Text style={{ color: fashionColors.text, fontWeight: "900" }}>
+          Medidas principais
         </Text>
-
-        <Text style={{ color: "#bca7df", fontSize: 13 }}>
-          Ombros: {mannequin.shoulder_cm ?? "-"} cm • Bíceps: {mannequin.biceps_cm ?? "-"} cm • Coxa: {mannequin.thigh_cm ?? "-"} cm • Entrepernas: {mannequin.inseam_cm ?? "-"} cm
+        <Text style={{ color: fashionColors.textSoft, lineHeight: 21 }}>
+          Busto/tórax: {mannequin.chest_cm} cm • Cintura: {mannequin.waist_cm} cm • Quadril: {mannequin.hip_cm} cm
         </Text>
-      </View>
-    </SafeAreaView>
+        <Text style={{ color: fashionColors.textMuted, fontSize: 13, lineHeight: 19 }}>
+          Medidas extras ajudam em mangas, calças e peças mais ajustadas, mas podem ser refinadas depois.
+        </Text>
+      </FashionCard>
+    </View>
   );
 }

@@ -1,13 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
-  SafeAreaView,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { getBodyModelPreviews, resolveApiUrl } from "../api/client";
+import {
+  AppScreen,
+  FashionCard,
+  InfoPill,
+  StepHeader,
+  fashionColors,
+} from "../components/FashionUI";
 import { BodyModel, BodyModelPreview, BodyRecommendationResponse } from "../types/body";
 
 type Props = {
@@ -17,6 +24,7 @@ type Props = {
 
 export function BodyModelSelectionScreen({ recommendation, onSelect }: Props) {
   const [previews, setPreviews] = useState<BodyModelPreview[]>([]);
+  const [loadingPreviews, setLoadingPreviews] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -31,6 +39,11 @@ export function BodyModelSelectionScreen({ recommendation, onSelect }: Props) {
         if (mounted) {
           setPreviews([]);
         }
+      })
+      .finally(() => {
+        if (mounted) {
+          setLoadingPreviews(false);
+        }
       });
 
     return () => {
@@ -43,15 +56,23 @@ export function BodyModelSelectionScreen({ recommendation, onSelect }: Props) {
   }, [previews]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f" }}>
+    <AppScreen>
       <ScrollView contentContainerStyle={{ padding: 24, gap: 14 }}>
-        <Text style={{ color: "white", fontSize: 28, fontWeight: "800" }}>
-          Escolha uma base
-        </Text>
+        <StepHeader
+          eyebrow="Silhueta"
+          step="2 de 5"
+          title="Escolha uma silhueta de partida"
+          subtitle="Selecione a base que mais parece com você hoje. Ela é só o ponto inicial: as medidas refinam o provador na próxima etapa."
+        />
 
-        <Text style={{ color: "#d8c7ff", fontSize: 15 }}>
-          IMC estimado: {recommendation.bmi}. Escolha o modelo que mais se aproxima do seu corpo.
-        </Text>
+        {loadingPreviews ? (
+          <FashionCard>
+            <ActivityIndicator color={fashionColors.text} />
+            <Text style={{ color: fashionColors.textSoft, textAlign: "center" }}>
+              Carregando miniaturas das silhuetas...
+            </Text>
+          </FashionCard>
+        ) : null}
 
         {recommendation.models.map((model) => (
           <ModelCard
@@ -62,7 +83,7 @@ export function BodyModelSelectionScreen({ recommendation, onSelect }: Props) {
           />
         ))}
       </ScrollView>
-    </SafeAreaView>
+    </AppScreen>
   );
 }
 
@@ -72,53 +93,48 @@ function ModelCard(props: {
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity
-      onPress={props.onPress}
-      style={{
-        backgroundColor: props.model.recommended ? "#3b1c5c" : "#21102f",
-        padding: 12,
-        borderRadius: 18,
-        borderWidth: 1,
-        borderColor: props.model.recommended ? "#a78bfa" : "#3f2458",
-        flexDirection: "row",
-        gap: 12,
-      }}
-    >
-      <View
-        style={{
-          width: 92,
-          height: 124,
-          borderRadius: 14,
-          backgroundColor: "#170b25",
-          overflow: "hidden",
-          borderWidth: 1,
-          borderColor: "#3f2458",
-        }}
-      >
-        {props.previewUrl ? (
-          <Image
-            source={{ uri: props.previewUrl }}
-            style={{ width: "100%", height: "100%" }}
-            resizeMode="cover"
-          />
-        ) : null}
-      </View>
+    <TouchableOpacity onPress={props.onPress} activeOpacity={0.88}>
+      <FashionCard highlighted={props.model.recommended} style={{ flexDirection: "row", gap: 12 }}>
+        <View
+          style={{
+            width: 96,
+            height: 132,
+            borderRadius: 16,
+            backgroundColor: "#170b25",
+            overflow: "hidden",
+            borderWidth: 1,
+            borderColor: "#3f2458",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {props.previewUrl ? (
+            <Image
+              source={{ uri: props.previewUrl }}
+              style={{ width: "100%", height: "100%" }}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text style={{ color: fashionColors.textMuted, textAlign: "center", fontSize: 12 }}>
+              Prévia em breve
+            </Text>
+          )}
+        </View>
 
-      <View style={{ flex: 1, justifyContent: "center" }}>
-        <Text style={{ color: "white", fontSize: 18, fontWeight: "800" }}>
-          {props.model.label}
-        </Text>
-
-        <Text style={{ color: "#d8c7ff", marginTop: 6 }}>
-          {props.model.description}
-        </Text>
-
-        {props.model.recommended && (
-          <Text style={{ color: "#c4b5fd", marginTop: 8, fontWeight: "700" }}>
-            Recomendado
+        <View style={{ flex: 1, justifyContent: "center", gap: 8 }}>
+          <Text style={{ color: fashionColors.text, fontSize: 18, fontWeight: "900" }}>
+            {props.model.label}
           </Text>
-        )}
-      </View>
+
+          <Text style={{ color: fashionColors.textSoft, lineHeight: 20 }}>
+            {props.model.description}
+          </Text>
+
+          {props.model.recommended ? (
+            <InfoPill label="Mais próximo do seu perfil" tone="gold" />
+          ) : null}
+        </View>
+      </FashionCard>
     </TouchableOpacity>
   );
 }

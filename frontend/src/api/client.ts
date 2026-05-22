@@ -48,6 +48,28 @@ export const API_BASE_URL =
   normalizeBaseUrl(Constants?.manifest?.extra?.apiUrl) ??
   DEFAULT_API_BASE_URL;
 
+function friendlyNetworkMessage(): string {
+  return "Não conseguimos conversar com o servidor agora. Confira sua internet ou tente novamente em alguns instantes.";
+}
+
+function friendlyServerMessage(text?: string | null): string {
+  const lower = (text ?? "").toLowerCase();
+
+  if (lower.includes("timeout") || lower.includes("tempo limite")) {
+    return "A prévia demorou mais que o esperado. O servidor pode estar iniciando; tente novamente em alguns instantes.";
+  }
+
+  if (lower.includes("scrape") || lower.includes("product") || lower.includes("url")) {
+    return "Não conseguimos ler esse link com segurança. Você pode tentar outro link ou enviar uma foto da peça.";
+  }
+
+  if (lower.includes("image") || lower.includes("upload") || lower.includes("file")) {
+    return "Não conseguimos preparar essa imagem. Tente uma foto mais nítida, com a peça inteira e fundo claro.";
+  }
+
+  return "Algo não saiu como esperado. Tente novamente em alguns instantes.";
+}
+
 async function fetchWithTimeout(
   input: string,
   options: RequestInit,
@@ -63,17 +85,14 @@ async function fetchWithTimeout(
     });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Tempo de conexao esgotado. Verifique sua internet.");
+      throw new Error("A conexão demorou mais que o esperado. Tente novamente em alguns instantes.");
     }
 
     if (
       error instanceof TypeError &&
       /network request failed|failed to fetch|networkerror/i.test(error.message)
     ) {
-      throw new Error(
-        `Falha de rede ao conectar a API em ${API_BASE_URL}. ` +
-          "Verifique sua conexao ou aguarde o servidor em nuvem iniciar e tente novamente."
-      );
+      throw new Error(friendlyNetworkMessage());
     }
 
     throw error;
@@ -103,7 +122,7 @@ async function request<T>(path: string, options: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || "Erro na API");
+    throw new Error(friendlyServerMessage(text));
   }
 
   return response.json() as Promise<T>;
@@ -173,7 +192,7 @@ export async function uploadGarmentImage(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || "Erro ao enviar imagem");
+    throw new Error(friendlyServerMessage(text));
   }
 
   return response.json() as Promise<GarmentUploadResult>;
@@ -264,16 +283,16 @@ export async function runVtonTaskWithPolling(
 
     if (status.state === "succeeded") {
       if (!status.result) {
-        throw new Error("Tarefa VTON finalizada sem resultado.");
+        throw new Error("A prévia terminou sem gerar uma imagem. Tente novamente ou use outra foto da peça.");
       }
 
       return status.result;
     }
 
     if (status.state === "failed") {
-      throw new Error(status.error ?? "Tarefa VTON falhou sem detalhe.");
+      throw new Error(friendlyServerMessage(status.error));
     }
   }
 
-  throw new Error("Tempo limite da tarefa VTON esgotado. Tente novamente em instantes.");
+  throw new Error("A prévia ainda não ficou pronta. Tente novamente em instantes.");
 }

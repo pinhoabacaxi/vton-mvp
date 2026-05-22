@@ -1,19 +1,33 @@
 import React, { useState } from "react";
-import { SafeAreaView, View, Text, TextInput, TouchableOpacity, Alert } from "react-native";
-import { scrapeProduct } from "../api/client";
+import { Alert, Image, ScrollView, Text, TextInput, View } from "react-native";
+import { resolveApiUrl, scrapeProduct } from "../api/client";
+import {
+  AppScreen,
+  FashionCard,
+  InfoPill,
+  PrimaryButton,
+  SecondaryButton,
+  StepHeader,
+  fashionColors,
+} from "../components/FashionUI";
 import { ProductScrapeResult } from "../types/product";
 
 type Props = {
   initialUrl?: string | null;
   onContinue: () => void;
-  onProductCaptured?: (data: { product_url: string; source_name?: string | null; product_title?: string | null; product?: ProductScrapeResult | null }) => void;
+  onProductCaptured?: (data: {
+    product_url: string;
+    source_name?: string | null;
+    product_title?: string | null;
+    product?: ProductScrapeResult | null;
+  }) => void;
   onBack: () => void;
 };
 
 export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, onBack }: Props) {
   const [url, setUrl] = useState(initialUrl ?? "");
   const [loading, setLoading] = useState(false);
-  const [product, setProduct] = useState<any | null>(null);
+  const [product, setProduct] = useState<ProductScrapeResult | null>(null);
 
   function detectSourceName(u: string): string | null {
     try {
@@ -26,7 +40,7 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
 
   async function submit() {
     if (!url.trim()) {
-      Alert.alert("Informe a URL", "Digite a URL do produto.");
+      Alert.alert("Cole o link da peça", "Use o link da página do produto na loja.");
       return;
     }
 
@@ -43,70 +57,110 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
         product_title: result.title ?? null,
         product: result,
       });
-
-      onContinue();
     } catch (err) {
-      Alert.alert("Erro ao analisar produto", err instanceof Error ? err.message : "Erro inesperado");
+      Alert.alert(
+        "Não conseguimos ler esse link",
+        err instanceof Error ? err.message : "Tente outro link ou envie uma foto da peça."
+      );
     } finally {
       setLoading(false);
     }
   }
 
+  const productImageUrl = resolveApiUrl(product?.image_url);
+  const measuresFound = product?.normalized_sizes?.length ?? 0;
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f" }}>
-      <View style={{ padding: 20, gap: 12 }}>
-        <Text style={{ color: "white", fontSize: 26, fontWeight: "800" }}>Produto / URL</Text>
+    <AppScreen>
+      <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
+        <StepHeader
+          eyebrow="Peça"
+          step="4 de 5"
+          title="Adicionar peça por link"
+          subtitle="Cole o link da loja para tentarmos encontrar imagem, nome, preço e medidas. Se a loja esconder alguma informação, o app faz uma estimativa cuidadosa."
+        />
 
-        <Text style={{ color: "#d8c7ff" }}>Cole a URL do produto para referência futura.</Text>
+        <FashionCard>
+          <Text style={{ color: fashionColors.text, fontWeight: "900" }}>Link da peça</Text>
+          <TextInput
+            value={url}
+            onChangeText={setUrl}
+            placeholder="https://loja.com/produto"
+            placeholderTextColor="#9b86b8"
+            autoCapitalize="none"
+            keyboardType="url"
+            style={{
+              backgroundColor: "#241233",
+              color: fashionColors.text,
+              padding: 14,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: fashionColors.borderStrong,
+            }}
+          />
+          <PrimaryButton
+            label={loading ? "Analisando a peça..." : "Analisar peça"}
+            onPress={submit}
+            loading={loading}
+          />
+        </FashionCard>
 
-        <TextInput value={url} onChangeText={setUrl} placeholder="https://example.com/product" placeholderTextColor="#7c6b8a" style={{ backgroundColor: "#241233", color: "white", padding: 12, borderRadius: 10, marginTop: 12 }} />
-
-        {product && (
-          <View style={{ backgroundColor: "#21102f", padding: 12, borderRadius: 10, marginTop: 12 }}>
-            <Text style={{ color: "white", fontWeight: "800" }}>{product.title ?? 'Produto encontrado'}</Text>
-            {product.image_url ? (
-              <View style={{ marginTop: 8 }}>
-                <Text style={{ color: "#c4b5fd" }}>Imagem:</Text>
-                <Text style={{ color: "#c4b5fd" }}>{product.image_url}</Text>
+        {product ? (
+          <FashionCard highlighted>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <View
+                style={{
+                  width: 92,
+                  height: 122,
+                  borderRadius: 16,
+                  backgroundColor: "#f3e8ff",
+                  overflow: "hidden",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {productImageUrl ? (
+                  <Image source={{ uri: productImageUrl }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+                ) : (
+                  <Text style={{ color: "#6d28d9", textAlign: "center", fontSize: 12 }}>
+                    Sem imagem
+                  </Text>
+                )}
               </View>
-            ) : null}
 
-            {product.price ? (
-              <Text style={{ color: "#c4b5fd", marginTop: 6 }}>Preço: {product.price}</Text>
-            ) : null}
-
-            <Text style={{ color: "#c4b5fd", marginTop: 6 }}>{product.source_url}</Text>
+              <View style={{ flex: 1, gap: 8 }}>
+                <Text style={{ color: fashionColors.text, fontSize: 17, fontWeight: "900" }} numberOfLines={3}>
+                  {product.title ?? "Peça encontrada"}
+                </Text>
+                {product.price ? (
+                  <Text style={{ color: fashionColors.textSoft, fontWeight: "800" }}>
+                    {product.price}
+                  </Text>
+                ) : null}
+                <InfoPill
+                  label={measuresFound > 0 ? `${measuresFound} tamanhos encontrados` : "Medidas não informadas pela loja"}
+                  tone={measuresFound > 0 ? "gold" : "neutral"}
+                />
+              </View>
+            </View>
 
             {product.fabric_analysis ? (
-              <Text style={{ color: "#c4b5fd", marginTop: 6 }}>
-                Tecido: stretch {Math.round((product.fabric_analysis.stretch_factor ?? 0) * 100)}% Ã¢â‚¬Â¢ encolhimento {Math.round((product.fabric_analysis.shrink_risk ?? 0) * 100)}%
+              <Text style={{ color: fashionColors.textSoft, lineHeight: 20 }}>
+                Tecido analisado: elasticidade estimada {Math.round((product.fabric_analysis.stretch_factor ?? 0) * 100)}%, risco de encolhimento {Math.round((product.fabric_analysis.shrink_risk ?? 0) * 100)}%.
               </Text>
-            ) : null}
+            ) : (
+              <Text style={{ color: fashionColors.textSoft, lineHeight: 20 }}>
+                Não encontramos composição do tecido. Vamos usar uma análise padrão e sinalizar incertezas no caimento.
+              </Text>
+            )}
 
-            {Array.isArray(product.normalized_sizes) && product.normalized_sizes.length > 0 ? (
-              <View style={{ marginTop: 8 }}>
-                <Text style={{ color: "#d8c7ff", fontWeight: "700" }}>Tamanhos normalizados</Text>
-                {product.normalized_sizes.map((s: any, i: number) => (
-                  <Text key={i} style={{ color: "#c4b5fd" }}>
-                    • {s.size_label} — B:{s.chest_cm ?? '-'} C:{s.waist_cm ?? '-'} Q:{s.hip_cm ?? '-'} M:{s.sleeve_cm ?? '-'} Coxa:{s.thigh_cm ?? '-'} Entrep:{s.inseam_cm ?? '-'}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        )}
+            <PrimaryButton label="Ver caimento" onPress={onContinue} />
+          </FashionCard>
+        ) : null}
 
-        <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-          <TouchableOpacity onPress={onBack} style={{ flex: 1, backgroundColor: "#6b7280", padding: 12, borderRadius: 10, alignItems: "center" }}>
-            <Text style={{ color: "white", fontWeight: "800" }}>Voltar</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={submit} disabled={loading} style={{ flex: 1, backgroundColor: loading ? '#6d28d9' : '#8b5cf6', padding: 12, borderRadius: 10, alignItems: "center" }}>
-            <Text style={{ color: "white", fontWeight: "800" }}>{loading ? 'Analisando...' : 'Salvar e continuar'}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </SafeAreaView>
+        <SecondaryButton label="Voltar ao provador" onPress={onBack} />
+      </ScrollView>
+    </AppScreen>
   );
 }
 
