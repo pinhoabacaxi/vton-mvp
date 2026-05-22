@@ -135,8 +135,6 @@ def create_mock_vton_result(data: VtonMockInput) -> VtonMockResult:
         include_label=False,
     )
 
-    draw = ImageDraw.Draw(image)
-    draw.text((40, 40), "VTON MOCK", fill="#e9d5ff")
     image = _apply_fit_heatmap_overlay(image, body_alpha, data.payload.fit_zones)
 
     image = _composite_garment_on_body(
@@ -380,6 +378,7 @@ def _composite_garment_on_body(
     payload: VtonPayload,
 ) -> Image.Image:
     garment = _load_processed_garment(payload.garment_processed_url)
+    foreground_occlusion = _build_foreground_occlusion_mask(payload.mannequin, image.size)
 
     if garment is None:
         fallback = _build_parametric_garment_placeholder(payload)
@@ -390,10 +389,12 @@ def _composite_garment_on_body(
                 body_alpha=body_alpha,
                 shadow_map_alpha=body_shadow,
                 light_map_rgba=body_light,
+                occlusion_mask_alpha=foreground_occlusion,
+                fit_zones=payload.fit_zones,
                 shadow_intensity=0.56,
                 highlight_intensity=0.34,
-                warp_strength=0.0,
-                bump_strength=0.0,
+                warp_strength=0.62,
+                bump_strength=0.16,
                 curve_hem=False,
             ),
         )
@@ -413,7 +414,8 @@ def _composite_garment_on_body(
             body_alpha=body_alpha.crop(garment_box),
             shadow_map_alpha=body_shadow.crop(garment_box),
             light_map_rgba=body_light.crop(garment_box),
-            occlusion_mask_alpha=None,
+            occlusion_mask_alpha=foreground_occlusion.crop(garment_box),
+            fit_zones=payload.fit_zones,
             shadow_intensity=0.62,
             highlight_intensity=0.36,
             warp_strength=1.0,
@@ -570,10 +572,13 @@ def _garment_target_box(payload: VtonPayload) -> tuple[int, int, int, int]:
     chest_half = int(164 * _bounded_scale(getattr(mannequin, "chest_scale", 1.0), 0.74, 1.36))
     waist_half = int(122 * _bounded_scale(getattr(mannequin, "waist_scale", 1.0), 0.72, 1.42))
 
+    width_multiplier, bottom_offset = _fit_target_adjustments(payload.fit_zones)
+
     target_width = int(max(300, shoulder_half * 1.92, chest_half * 2.06, waist_half * 2.20))
+    target_width = int(target_width * width_multiplier)
     target_width = min(500, target_width)
     target_top = 310
-    target_bottom = 760
+    target_bottom = min(820, 760 + bottom_offset)
 
     return (
         center_x - target_width // 2,
@@ -581,6 +586,57 @@ def _garment_target_box(payload: VtonPayload) -> tuple[int, int, int, int]:
         center_x + target_width // 2,
         target_bottom,
     )
+
+
+def _fit_target_adjustments(zones: List[FitZone]) -> tuple[float, int]:
+    tightness = 0.0
+    looseness = 0.0
+
+    for zone in zones:
+        status = (zone.status or "").lower()
+        pressure = abs(float(zone.pressure_score or 0.0))
+        if status in {"apertado", "too_small", "tight"} or zone.color == "red":
+            tightness = max(tightness, 0.40 + pressure * 0.35)
+        elif status in {"folgado", "loose"} or zone.color in {"green", "blue"}:
+            looseness = max(looseness, 0.30 + pressure * 0.26)
+
+    tightness = min(1.0, tightness)
+    looseness = min(1.0, looseness)
+    width_multiplier = max(0.96, min(1.10, 1.0 + looseness * 0.075 - tightness * 0.025))
+    bottom_offset = int(looseness * 34 - tightness * 8)
+    return width_multiplier, bottom_offset
+
+
+def _build_foreground_occlusion_mask(mannequin, size: tuple[int, int]) -> Image.Image:
+    width, height = size
+    center_x = width // 2
+    shoulder_half = int(172 * _bounded_scale(getattr(mannequin, "shoulder_scale", 1.0), 0.74, 1.32))
+    arm_scale = _bounded_scale(getattr(mannequin, "arm_scale", 1.0), 0.82, 1.22)
+    biceps_scale = _bounded_scale(getattr(mannequin, "biceps_scale", 1.0), 0.72, 1.55)
+    forearm_half = int(26 * arm_scale)
+    hand_half = int(32 * arm_scale)
+    y0 = int(height * 0.43)
+    y1 = int(height * 0.66)
+    hand_y = int(height * 0.675)
+
+    mask = Image.new("L", size, 0)
+    draw = ImageDraw.Draw(mask)
+
+    for side in (-1, 1):
+        arm_x = center_x + side * int(shoulder_half * 1.04)
+        elbow_x = center_x + side * int(shoulder_half * (1.08 + (biceps_scale - 1.0) * 0.04))
+        draw.line((arm_x, y0, elbow_x, y1), fill=82, width=max(18, forearm_half * 2))
+        draw.ellipse(
+            (
+                elbow_x - hand_half,
+                hand_y - hand_half,
+                elbow_x + hand_half,
+                hand_y + hand_half * 1.25,
+            ),
+            fill=116,
+        )
+
+    return mask.filter(ImageFilter.GaussianBlur(radius=7))
 
 
 def _build_parametric_garment_placeholder(payload: VtonPayload) -> Image.Image:
@@ -652,7 +708,17 @@ def _build_parametric_garment_placeholder(payload: VtonPayload) -> Image.Image:
     layer = Image.alpha_composite(base, light)
     layer = Image.alpha_composite(layer, outline)
     draw = ImageDraw.Draw(layer)
-    draw.text((center_x - 78, top + int(height * 0.42)), "MOCK", fill="#ffffff")
+    seam_color = (255, 246, 255, 54)
+    draw.line(
+        (
+            center_x,
+            top + int(height * 0.22),
+            center_x,
+            bottom - int(height * 0.12),
+        ),
+        fill=seam_color,
+        width=max(2, width // 80),
+    )
     return layer
 
 
@@ -727,10 +793,10 @@ def _draw_fit_labels(draw: ImageDraw.ImageDraw, zones: List[FitZone]) -> None:
     }
 
     label_map = {
-        "chest": "Torax",
+        "chest": "Busto",
         "waist": "Cintura",
         "hip": "Quadril",
-        "biceps": "Biceps",
+        "biceps": "Braço",
         "sleeve": "Manga",
         "thigh": "Coxa",
         "inseam": "Entrepernas",
@@ -744,7 +810,7 @@ def _draw_fit_labels(draw: ImageDraw.ImageDraw, zones: List[FitZone]) -> None:
         draw.rounded_rectangle((40, y, 290, y + 58), radius=16, fill=color)
         draw.text(
             (58, y + 16),
-            f"{label_map.get(zone.zone, zone.zone)}: {zone.status}",
+            f"{label_map.get(zone.zone, zone.zone)}: {_friendly_fit_status(zone)}",
             fill="#111827",
         )
 
@@ -765,3 +831,14 @@ def _heat_color(color: str) -> str:
     if color == "gray":
         return "#d1d5db"
     return "#c4b5fd"
+
+
+def _friendly_fit_status(zone: FitZone) -> str:
+    status = (zone.status or "").lower()
+    if status in {"apertado", "too_small"} or zone.color == "red":
+        return "pouca folga"
+    if status in {"justo", "tight", "balanced"} or zone.color == "yellow":
+        return "caimento proximo"
+    if status in {"folgado", "loose"} or zone.color in {"green", "blue"}:
+        return "folga confortavel"
+    return "medida ausente"

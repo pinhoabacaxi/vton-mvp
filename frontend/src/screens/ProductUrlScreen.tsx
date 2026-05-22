@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Alert, Image, ScrollView, Text, TextInput, View } from "react-native";
+import React, { useRef, useState } from "react";
+import { Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from "react-native";
 import { resolveApiUrl, scrapeProduct } from "../api/client";
 import {
   AppScreen,
@@ -28,10 +28,17 @@ type Props = {
 };
 
 export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, onBack, onUploadPhoto }: Props) {
+  const scrollRef = useRef<ScrollView>(null);
   const [url, setUrl] = useState(initialUrl ?? "");
   const [loading, setLoading] = useState(false);
   const [product, setProduct] = useState<ProductScrapeResult | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
+
+  function showLinkError(message: string) {
+    Keyboard.dismiss();
+    setLinkError(message);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+  }
 
   function detectSourceName(u: string): string | null {
     try {
@@ -43,27 +50,40 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
   }
 
   async function submit() {
-    if (!url.trim()) {
+    const trimmedUrl = url.trim();
+
+    if (!trimmedUrl) {
       Alert.alert("Cole o link da peça", "Use o link da página do produto na loja.");
+      return;
+    }
+
+    try {
+      const parsedUrl = new URL(trimmedUrl);
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        showLinkError("Use um link público começando com http:// ou https://.");
+        return;
+      }
+    } catch {
+      showLinkError("Use um link público de produto, começando com http:// ou https://.");
       return;
     }
 
     setLoading(true);
     setLinkError(null);
     try {
-      const result = await scrapeProduct(url.trim());
+      const result = await scrapeProduct(trimmedUrl);
       setProduct(result);
 
-      const sourceName = detectSourceName(result.source_url ?? url.trim());
+      const sourceName = detectSourceName(result.source_url ?? trimmedUrl);
 
       onProductCaptured?.({
-        product_url: result.source_url ?? url.trim(),
+        product_url: result.source_url ?? trimmedUrl,
         source_name: sourceName,
         product_title: result.title ?? null,
         product: result,
       });
     } catch (err) {
-      setLinkError(err instanceof Error ? err.message : "Tente outro link ou envie uma foto da peça.");
+      showLinkError(err instanceof Error ? err.message : "Tente outro link ou envie uma foto da peça.");
     } finally {
       setLoading(false);
     }
@@ -74,7 +94,12 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
 
   return (
     <AppScreen>
-      <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView
+          ref={scrollRef}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ padding: 24, gap: 16, paddingBottom: 40 }}
+        >
         <StepHeader
           eyebrow="Peça"
           step="4 de 5"
@@ -94,7 +119,11 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
             placeholder="https://loja.com/produto"
             placeholderTextColor="#9b86b8"
             autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="go"
             keyboardType="url"
+            onSubmitEditing={submit}
+            blurOnSubmit
             style={{
               backgroundColor: "#241233",
               color: fashionColors.text,
@@ -178,7 +207,8 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
         ) : null}
 
         <SecondaryButton label="Voltar ao provador" onPress={onBack} />
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </AppScreen>
   );
 }

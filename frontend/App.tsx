@@ -11,7 +11,7 @@ import { recommendBodyModels, generateMannequin } from "./src/api/client";
 import { InitialBodyInput, BodyRecommendationResponse, BodyModel, FineTuneInput, MannequinParams } from "./src/types/body";
 import { createSavedLook, SavedLook, SaveLookInput } from "./src/types/look";
 import { createClosetItem } from "./src/types/closet";
-import { FitCheckResult, ProductScrapeResult } from "./src/types/product";
+import { FitCheckResult, GarmentUploadResult, ProductScrapeResult } from "./src/types/product";
 import { MannequinRenderResult } from "./src/types/mannequin";
 import { VtonPayload, VtonRunResult } from "./src/types/vton";
 import { buildAffiliateUrl } from "./src/utils/affiliate";
@@ -51,6 +51,21 @@ type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 enableScreens();
+
+function createRemoteGarmentFromProduct(product?: ProductScrapeResult | null): GarmentUploadResult | null {
+  if (!product?.image_url) return null;
+
+  return {
+    filename: "product-link-image",
+    content_type: "image/remote-url",
+    original_path: product.image_url,
+    processed_path: null,
+    original_url: product.image_url,
+    processed_url: product.image_url,
+    background_removed: false,
+    message: "Imagem da peça importada do link para a prévia visual.",
+  };
+}
 
 function MissingFlowScreen({
   message,
@@ -318,6 +333,7 @@ export default function App() {
                   initialUrl={productUrl}
                   onProductCaptured={(data) => {
                     const affiliateUrl = buildAffiliateUrl({ sourceUrl: data.product_url, sourceName: data.source_name, campaign: "virtual_try_on" });
+                    const remoteGarment = createRemoteGarmentFromProduct(data.product);
                     setProductDetails(data.product ?? null);
                     setProductSource({
                       product_url: data.product_url,
@@ -325,6 +341,9 @@ export default function App() {
                       source_name: data.source_name ?? data.product_title ?? null,
                       product_title: data.product_title ?? null,
                     });
+                    if (remoteGarment) {
+                      setGarment(remoteGarment);
+                    }
                     setProductUrl(data.product_url);
                   }}
                   onContinue={() => props.navigation.navigate("FitCheck")}

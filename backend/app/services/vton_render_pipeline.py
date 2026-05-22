@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Sequence
 
-from PIL import Image, ImageChops, ImageDraw, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
 from app.models.body import MannequinParams
+from app.models.product import FitZone
 from app.utils.tiered_cache import get_cache, set_cache, stable_hash
 
 try:
@@ -31,6 +32,7 @@ class GarmentRenderContext:
     shadow_map_alpha: Image.Image
     light_map_rgba: Optional[Image.Image] = None
     occlusion_mask_alpha: Optional[Image.Image] = None
+    fit_zones: Sequence[FitZone] = ()
     shadow_intensity: float = 0.58
     highlight_intensity: float = 0.30
     warp_strength: float = 1.00
@@ -49,17 +51,18 @@ class MannequinGarmentRenderer:
         """Render a garment through warp, lighting and occlusion passes."""
 
         output = garment_rgba.convert("RGBA")
+        traits = _fit_render_traits(context.fit_zones)
 
         if context.warp_strength > 0:
             displacement_map = build_cached_measurement_displacement_map(
                 output.size,
                 context.mannequin,
-                strength=context.warp_strength,
+                strength=context.warp_strength * traits["warp_multiplier"],
             )
             bump_map = build_fabric_bump_displacement_map(
                 output.size,
                 context.mannequin,
-                strength=context.bump_strength,
+                strength=context.bump_strength * traits["bump_multiplier"],
             )
             displacement_map = combine_displacement_maps(displacement_map, bump_map)
 
@@ -69,7 +72,7 @@ class MannequinGarmentRenderer:
                 output = warp_garment_by_profile_bands(
                     output,
                     context.mannequin,
-                    strength=context.warp_strength,
+                    strength=context.warp_strength * traits["warp_multiplier"],
                 )
 
         if context.curve_hem:
@@ -80,9 +83,11 @@ class MannequinGarmentRenderer:
             shadow_map_alpha=context.shadow_map_alpha,
             light_map_rgba=context.light_map_rgba,
             body_alpha=context.body_alpha,
-            shadow_intensity=context.shadow_intensity,
-            highlight_intensity=context.highlight_intensity,
+            shadow_intensity=context.shadow_intensity * traits["shadow_multiplier"],
+            highlight_intensity=context.highlight_intensity * traits["highlight_multiplier"],
         )
+
+        output = apply_fit_pressure_to_garment(output, context.fit_zones)
 
         return apply_occlusion_mask(output, context.occlusion_mask_alpha)
 
@@ -320,6 +325,182 @@ def apply_occlusion_mask(
     occlusion = occlusion.point(lambda value: int(value * strength))
     alpha = ImageChops.subtract(garment.getchannel("A"), occlusion)
     return Image.merge("RGBA", (*garment.convert("RGB").split(), alpha))
+
+
+def apply_fit_pressure_to_garment(
+    garment_rgba: Image.Image,
+    fit_zones: Sequence[FitZone],
+) -> Image.Image:
+    """Draw fit-pressure cues directly on the rendered garment.
+
+    The body heatmap can be hidden by opaque clothing. This pass paints a
+    subtle textile overlay on top of the garment itself so tight, close,
+    relaxed and unknown measurements remain visible in the final mock image.
+    """
+
+    if not fit_zones:
+        return garment_rgba.convert("RGBA")
+
+    garment = garment_rgba.convert("RGBA")
+    garment_alpha = garment.getchannel("A")
+    overlay = Image.new("RGBA", garment.size, (0, 0, 0, 0))
+    details = Image.new("RGBA", garment.size, (0, 0, 0, 0))
+    details_draw = ImageDraw.Draw(details)
+
+    for zone in fit_zones:
+        for box in _garment_zone_boxes(zone.zone, garment.size):
+            mask = Image.new("L", garment.size, 0)
+            draw = ImageDraw.Draw(mask)
+            radius = max(10, int((box[2] - box[0]) * 0.10))
+            draw.rounded_rectangle(box, radius=radius, fill=_zone_alpha(zone))
+            mask = mask.filter(ImageFilter.GaussianBlur(radius=max(3, garment.width // 90)))
+            mask = ImageChops.multiply(mask, garment_alpha)
+
+            color = _fit_zone_rgb(zone.color)
+            layer = Image.new("RGBA", garment.size, (*color, 0))
+            layer.putalpha(mask)
+            overlay = Image.alpha_composite(overlay, layer)
+
+            _draw_pressure_detail(details_draw, box, zone)
+
+    details.putalpha(ImageChops.multiply(details.getchannel("A"), garment_alpha))
+    garment = Image.alpha_composite(garment, overlay)
+    return Image.alpha_composite(garment, details)
+
+
+def _fit_render_traits(fit_zones: Sequence[FitZone]) -> dict[str, float]:
+    tightness = 0.0
+    looseness = 0.0
+
+    for zone in fit_zones:
+        pressure = abs(float(zone.pressure_score or 0.0))
+        if _is_tight_zone(zone):
+            tightness = max(tightness, 0.45 + pressure)
+        elif _is_loose_zone(zone):
+            looseness = max(looseness, 0.30 + pressure * 0.35)
+
+    tightness = _clamp_float(tightness, 0.0, 1.0)
+    looseness = _clamp_float(looseness, 0.0, 1.0)
+
+    return {
+        "warp_multiplier": _clamp_float(1.0 + tightness * 0.24 - looseness * 0.16, 0.72, 1.30),
+        "bump_multiplier": _clamp_float(1.0 + tightness * 0.70 + looseness * 0.22, 0.72, 1.72),
+        "shadow_multiplier": _clamp_float(1.0 + tightness * 0.20 - looseness * 0.08, 0.82, 1.26),
+        "highlight_multiplier": _clamp_float(1.0 + tightness * 0.16 + looseness * 0.08, 0.86, 1.24),
+    }
+
+
+def _garment_zone_boxes(zone_name: str, size: tuple[int, int]) -> list[tuple[int, int, int, int]]:
+    width, height = size
+    zones = {
+        "shoulder": [(0.12, 0.03, 0.88, 0.22)],
+        "chest": [(0.16, 0.18, 0.84, 0.43)],
+        "waist": [(0.22, 0.45, 0.78, 0.66)],
+        "hip": [(0.18, 0.66, 0.82, 0.92)],
+        "top_length": [(0.22, 0.72, 0.78, 0.98)],
+        "length": [(0.18, 0.72, 0.82, 0.98)],
+        "biceps": [(0.02, 0.15, 0.24, 0.54), (0.76, 0.15, 0.98, 0.54)],
+        "sleeve": [(0.00, 0.18, 0.27, 0.72), (0.73, 0.18, 1.00, 0.72)],
+        "thigh": [(0.28, 0.58, 0.48, 0.98), (0.52, 0.58, 0.72, 0.98)],
+        "inseam": [(0.32, 0.60, 0.46, 0.98), (0.54, 0.60, 0.68, 0.98)],
+    }
+
+    boxes = []
+    for left, top, right, bottom in zones.get(zone_name, []):
+        boxes.append(
+            (
+                int(width * left),
+                int(height * top),
+                int(width * right),
+                int(height * bottom),
+            )
+        )
+    return boxes
+
+
+def _draw_pressure_detail(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    zone: FitZone,
+) -> None:
+    left, top, right, bottom = box
+    width = max(1, right - left)
+    height = max(1, bottom - top)
+
+    if _is_tight_zone(zone):
+        color = (255, 244, 214, 90)
+        step = max(16, width // 6)
+        for x in range(left - height, right + height, step):
+            draw.line((x, bottom, x + height, top), fill=color, width=max(2, width // 90))
+        return
+
+    if _is_unknown_zone(zone):
+        color = (255, 255, 255, 82)
+        dot_radius = max(2, width // 44)
+        for index, x in enumerate(range(left + width // 5, right, max(18, width // 4))):
+            y = top + height // 2 + ((index % 2) * 2 - 1) * height // 7
+            draw.ellipse((x - dot_radius, y - dot_radius, x + dot_radius, y + dot_radius), fill=color)
+        return
+
+    if _is_loose_zone(zone):
+        color = (226, 232, 255, 62)
+        for index in range(3):
+            y = top + int(height * (0.34 + index * 0.18))
+            draw.arc(
+                (
+                    int(left + width * 0.10),
+                    int(y - height * 0.16),
+                    int(right - width * 0.10),
+                    int(y + height * 0.16),
+                ),
+                start=8,
+                end=172,
+                fill=color,
+                width=max(2, width // 100),
+            )
+        return
+
+    color = (255, 255, 255, 54)
+    for x in (left + width // 3, right - width // 3):
+        draw.line((x, int(top + height * 0.18), x, int(bottom - height * 0.18)), fill=color, width=max(2, width // 110))
+
+
+def _zone_alpha(zone: FitZone) -> int:
+    pressure = abs(float(zone.pressure_score or 0.0))
+    if _is_unknown_zone(zone):
+        return 46
+    if _is_tight_zone(zone):
+        return int(72 + min(36, pressure * 26))
+    if _is_loose_zone(zone):
+        return int(34 + min(18, pressure * 12))
+    return 50
+
+
+def _fit_zone_rgb(color: str) -> tuple[int, int, int]:
+    if color == "red":
+        return (239, 68, 68)
+    if color == "yellow":
+        return (245, 158, 11)
+    if color == "green":
+        return (34, 197, 94)
+    if color == "blue":
+        return (56, 189, 248)
+    return (156, 163, 175)
+
+
+def _is_tight_zone(zone: FitZone) -> bool:
+    status = (zone.status or "").lower()
+    return status in {"apertado", "too_small", "tight"} or zone.color == "red"
+
+
+def _is_loose_zone(zone: FitZone) -> bool:
+    status = (zone.status or "").lower()
+    return status in {"folgado", "loose"} or zone.color in {"green", "blue"}
+
+
+def _is_unknown_zone(zone: FitZone) -> bool:
+    status = (zone.status or "").lower()
+    return status in {"sem_informacao", "unknown"} or zone.color == "gray"
 
 
 def curve_garment_hem(
