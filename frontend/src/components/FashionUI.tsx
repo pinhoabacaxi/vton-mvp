@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardTypeOptions,
@@ -14,6 +14,8 @@ export const fashionColors = {
   background: "#12071f",
   surface: "#21102f",
   surfaceSoft: "#2d1640",
+  surfaceDeep: "#170b25",
+  input: "#241233",
   border: "#4c2a69",
   borderStrong: "#7c3aed",
   primary: "#8b5cf6",
@@ -25,6 +27,42 @@ export const fashionColors = {
   gold: "#facc15",
   dangerSurface: "#3b0a1f",
   dangerText: "#fecdd3",
+  success: "#16a34a",
+  warning: "#f59e0b",
+  info: "#38bdf8",
+};
+
+export const fashionSpacing = {
+  xs: 6,
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 24,
+};
+
+export const fashionRadius = {
+  sm: 12,
+  md: 16,
+  lg: 18,
+  xl: 24,
+  pill: 999,
+};
+
+export const fashionTypography = {
+  title: { fontSize: 30, lineHeight: 36, fontWeight: "900" as const },
+  section: { fontSize: 18, lineHeight: 24, fontWeight: "900" as const },
+  body: { fontSize: 15, lineHeight: 22 },
+  caption: { fontSize: 12, lineHeight: 18 },
+};
+
+export const fashionShadows = {
+  soft: {
+    shadowColor: "#000000",
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
 };
 
 export const guidedJourneySteps = [
@@ -62,7 +100,7 @@ export function StepHeader(props: {
   step?: string;
 }) {
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: fashionSpacing.sm }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         {props.eyebrow ? (
           <Text style={{ color: fashionColors.gold, fontSize: 12, fontWeight: "800", letterSpacing: 0 }}>
@@ -76,7 +114,7 @@ export function StepHeader(props: {
               backgroundColor: fashionColors.surfaceSoft,
               borderColor: fashionColors.border,
               borderWidth: 1,
-              borderRadius: 999,
+              borderRadius: fashionRadius.pill,
               paddingHorizontal: 10,
               paddingVertical: 5,
             }}
@@ -88,12 +126,12 @@ export function StepHeader(props: {
         ) : null}
       </View>
 
-      <Text style={{ color: fashionColors.text, fontSize: 30, fontWeight: "900", lineHeight: 36 }}>
+      <Text style={{ color: fashionColors.text, ...fashionTypography.title }}>
         {props.title}
       </Text>
 
       {props.subtitle ? (
-        <Text style={{ color: fashionColors.textSoft, fontSize: 15, lineHeight: 22 }}>
+        <Text style={{ color: fashionColors.textSoft, ...fashionTypography.body }}>
           {props.subtitle}
         </Text>
       ) : null}
@@ -107,7 +145,7 @@ export function JourneyStepper(props: {
   const activeIndex = guidedJourneySteps.findIndex((step) => step.key === props.activeStep);
 
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: fashionSpacing.sm }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         {guidedJourneySteps.map((step, index) => {
           const isActive = step.key === props.activeStep;
@@ -164,11 +202,12 @@ export function FashionCard(props: {
       style={[
         {
           backgroundColor: props.highlighted ? "#2f1550" : fashionColors.surface,
-          borderRadius: 18,
-          padding: 14,
+          borderRadius: fashionRadius.lg,
+          padding: fashionSpacing.md,
           borderWidth: 1,
           borderColor: props.highlighted ? "#a78bfa" : fashionColors.border,
-          gap: 10,
+          gap: fashionSpacing.sm,
+          ...fashionShadows.soft,
         },
         props.style,
       ]}
@@ -202,7 +241,7 @@ export function PrimaryButton(props: {
       style={{
         backgroundColor: disabled ? "#5b3d87" : color,
         padding: 16,
-        borderRadius: 18,
+        borderRadius: fashionRadius.lg,
         alignItems: "center",
         justifyContent: "center",
         minHeight: 52,
@@ -229,13 +268,14 @@ export function SecondaryButton(props: {
       onPress={props.onPress}
       disabled={props.disabled}
       style={{
-        backgroundColor: "#241233",
+        backgroundColor: fashionColors.input,
         borderColor: fashionColors.border,
         borderWidth: 1,
         padding: 14,
-        borderRadius: 16,
+        borderRadius: fashionRadius.md,
         alignItems: "center",
         justifyContent: "center",
+        minHeight: 50,
         opacity: props.disabled ? 0.56 : 1,
       }}
     >
@@ -280,12 +320,13 @@ export function MeasurementInput(props: {
         placeholder={props.placeholder ?? (props.estimatedValue != null ? String(props.estimatedValue) : undefined)}
         placeholderTextColor="#9b86b8"
         style={{
-          backgroundColor: "#241233",
+          backgroundColor: fashionColors.input,
           color: fashionColors.text,
           padding: 14,
-          borderRadius: 14,
+          borderRadius: fashionRadius.md,
           borderWidth: 1,
           borderColor: fashionColors.borderStrong,
+          minHeight: 52,
         }}
       />
     </View>
@@ -297,7 +338,7 @@ export function FriendlyError(props: { title?: string; message: string }) {
     <View
       style={{
         backgroundColor: fashionColors.dangerSurface,
-        borderRadius: 16,
+        borderRadius: fashionRadius.md,
         padding: 14,
         borderWidth: 1,
         borderColor: "#be123c",
@@ -339,7 +380,7 @@ export function InfoPill(props: { label: string; tone?: "gold" | "purple" | "neu
     <View
       style={{
         backgroundColor: background,
-        borderRadius: 999,
+        borderRadius: fashionRadius.pill,
         paddingHorizontal: 12,
         paddingVertical: 7,
         alignSelf: "flex-start",
@@ -349,5 +390,128 @@ export function InfoPill(props: { label: string; tone?: "gold" | "purple" | "neu
         {props.label}
       </Text>
     </View>
+  );
+}
+
+export function PremiumEmptyState(props: {
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
+  variant?: "closet" | "history" | "linkError" | "generic";
+}) {
+  const symbol =
+    props.variant === "closet"
+      ? "◇"
+      : props.variant === "history"
+        ? "◎"
+        : props.variant === "linkError"
+          ? "!"
+          : "✦";
+
+  return (
+    <FashionCard highlighted style={{ alignItems: "center", paddingVertical: 22 }}>
+      <View
+        style={{
+          width: 54,
+          height: 54,
+          borderRadius: 27,
+          backgroundColor: fashionColors.surfaceSoft,
+          borderWidth: 1,
+          borderColor: "#a78bfa",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Text style={{ color: fashionColors.gold, fontSize: 24, fontWeight: "900" }}>
+          {symbol}
+        </Text>
+      </View>
+      <Text style={{ color: fashionColors.text, ...fashionTypography.section, textAlign: "center" }}>
+        {props.title}
+      </Text>
+      <Text style={{ color: fashionColors.textSoft, ...fashionTypography.body, textAlign: "center" }}>
+        {props.description}
+      </Text>
+      {props.actionLabel && props.onAction ? (
+        <PrimaryButton label={props.actionLabel} onPress={props.onAction} />
+      ) : null}
+      {props.secondaryActionLabel && props.onSecondaryAction ? (
+        <SecondaryButton label={props.secondaryActionLabel} onPress={props.onSecondaryAction} />
+      ) : null}
+    </FashionCard>
+  );
+}
+
+export function MeasurementGuideAccordion(props: {
+  title: string;
+  description: string;
+  initiallyExpanded?: boolean;
+  illustrationKey?: string;
+}) {
+  const [expanded, setExpanded] = useState(Boolean(props.initiallyExpanded));
+
+  return (
+    <View
+      style={{
+        backgroundColor: fashionColors.surfaceSoft,
+        borderColor: fashionColors.border,
+        borderWidth: 1,
+        borderRadius: fashionRadius.md,
+        overflow: "hidden",
+      }}
+    >
+      <TouchableOpacity
+        onPress={() => setExpanded((value) => !value)}
+        style={{
+          minHeight: 48,
+          paddingHorizontal: fashionSpacing.md,
+          paddingVertical: fashionSpacing.sm,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: fashionSpacing.sm,
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: fashionColors.text, fontWeight: "900" }}>{props.title}</Text>
+          {props.illustrationKey ? (
+            <Text style={{ color: fashionColors.textMuted, ...fashionTypography.caption }}>
+              Guia visual preparado: {props.illustrationKey}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={{ color: fashionColors.gold, fontWeight: "900" }}>
+          {expanded ? "Fechar" : "Como medir"}
+        </Text>
+      </TouchableOpacity>
+
+      {expanded ? (
+        <View style={{ paddingHorizontal: fashionSpacing.md, paddingBottom: fashionSpacing.md }}>
+          <Text style={{ color: fashionColors.textSoft, ...fashionTypography.body }}>
+            {props.description}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+export function DebugPanel(props: {
+  title?: string;
+  children: React.ReactNode;
+  enabled?: boolean;
+}) {
+  if (!__DEV__ && !props.enabled) return null;
+
+  return (
+    <FashionCard>
+      <Text style={{ color: fashionColors.gold, fontWeight: "900" }}>
+        {props.title ?? "Debug"}
+      </Text>
+      {props.children}
+    </FashionCard>
   );
 }

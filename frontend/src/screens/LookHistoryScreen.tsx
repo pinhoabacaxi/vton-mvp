@@ -3,6 +3,7 @@ import { Alert, Image, ScrollView, Text, TouchableOpacity, View } from "react-na
 import {
   AppScreen,
   FashionCard,
+  PremiumEmptyState,
   PrimaryButton,
   SecondaryButton,
   StepHeader,
@@ -10,6 +11,7 @@ import {
 } from "../components/FashionUI";
 import { resolveApiUrl, submitFitFeedback } from "../api/client";
 import { openExternalUrl, getPreferredBuyUrl } from "../utils/openExternalUrl";
+import { buildFitSummaryForUser } from "../utils/fitCopy";
 import { SavedLook } from "../types/look";
 
 type Props = {
@@ -44,12 +46,13 @@ export function LookHistoryScreen({ looks, onOpenLook, onBack, onClear }: Props)
         />
 
         {looks.length === 0 ? (
-          <FashionCard>
-            <Text style={{ color: fashionColors.text, fontWeight: "900" }}>Nenhum look salvo ainda</Text>
-            <Text style={{ color: fashionColors.textSoft }}>
-              Quando você salvar uma prévia, ela aparecerá aqui.
-            </Text>
-          </FashionCard>
+          <PremiumEmptyState
+            variant="history"
+            title="Seus looks salvos aparecerão aqui."
+            description="Experimente uma peça e salve o resultado para comparar caimentos e estilos depois."
+            actionLabel="Criar primeiro look"
+            onAction={onBack}
+          />
         ) : (
           looks.map((look) => {
             const img = resolveApiUrl(look.vton_result.result_url ?? null);
@@ -73,7 +76,7 @@ export function LookHistoryScreen({ looks, onOpenLook, onBack, onClear }: Props)
                     {new Date(look.created_at).toLocaleString()}
                   </Text>
                   <Text style={{ color: fashionColors.textSoft, lineHeight: 20 }}>
-                    {buildFitSummary(look.fit_zones)}
+                    {buildFitSummaryForUser(look.fit_zones)}
                   </Text>
 
                   {look.source ? (
@@ -105,13 +108,13 @@ export function LookHistoryScreen({ looks, onOpenLook, onBack, onClear }: Props)
                       Como essa peça ficou em você?
                     </Text>
                     <View style={{ flexDirection: "row", gap: 8 }}>
-                      <TouchableOpacity onPress={() => sendFeedback(look, "apertado")} style={{ flex: 1, backgroundColor: "#7f1d1d", padding: 9, borderRadius: 10, alignItems: "center" }}>
+                      <TouchableOpacity onPress={() => sendFeedback(look, "apertado")} style={{ flex: 1, backgroundColor: "#7f1d1d", padding: 9, borderRadius: 10, alignItems: "center", justifyContent: "center", minHeight: 48 }}>
                         <Text style={{ color: "white", fontWeight: "800" }}>Pouca folga</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => sendFeedback(look, "justo")} style={{ flex: 1, backgroundColor: "#92400e", padding: 9, borderRadius: 10, alignItems: "center" }}>
+                      <TouchableOpacity onPress={() => sendFeedback(look, "justo")} style={{ flex: 1, backgroundColor: "#92400e", padding: 9, borderRadius: 10, alignItems: "center", justifyContent: "center", minHeight: 48 }}>
                         <Text style={{ color: "white", fontWeight: "800" }}>Próxima</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => sendFeedback(look, "folgado")} style={{ flex: 1, backgroundColor: "#14532d", padding: 9, borderRadius: 10, alignItems: "center" }}>
+                      <TouchableOpacity onPress={() => sendFeedback(look, "folgado")} style={{ flex: 1, backgroundColor: "#14532d", padding: 9, borderRadius: 10, alignItems: "center", justifyContent: "center", minHeight: 48 }}>
                         <Text style={{ color: "white", fontWeight: "800" }}>Mais solta</Text>
                       </TouchableOpacity>
                     </View>
@@ -147,27 +150,6 @@ export function LookHistoryScreen({ looks, onOpenLook, onBack, onClear }: Props)
 }
 
 export default LookHistoryScreen;
-
-function buildFitSummary(fitZones: SavedLook["fit_zones"]): string {
-  if (fitZones.length === 0) return "Caimento ainda não avaliado.";
-
-  const hasTight = fitZones.some((zone) =>
-    zone.status === "apertado" || zone.status === "too_small" || zone.status === "tight" || zone.color === "red"
-  );
-
-  const hasBalanced = fitZones.some((zone) =>
-    zone.status === "justo" || zone.status === "balanced" || zone.color === "yellow"
-  );
-
-  const hasLoose = fitZones.some((zone) =>
-    zone.status === "folgado" || zone.status === "loose" || zone.color === "green" || zone.color === "blue"
-  );
-
-  if (hasTight) return "Pode ter pouca folga em algumas regiões.";
-  if (hasBalanced) return "Caimento próximo ao corpo.";
-  if (hasLoose) return "Folga confortável.";
-  return "Caimento estimado.";
-}
 
 function dominantFitStatus(fitZones: SavedLook["fit_zones"]): string {
   if (fitZones.some((zone) => zone.status === "apertado" || zone.color === "red")) {

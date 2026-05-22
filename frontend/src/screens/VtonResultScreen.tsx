@@ -12,9 +12,11 @@ import { resolveApiUrl } from "../api/client";
 import { shareImageFromUrl } from "../utils/shareImage";
 import { shareCapturedImage } from "../utils/shareViewShot";
 import { openExternalUrl, getPreferredBuyUrl } from "../utils/openExternalUrl";
+import { buildFitInsight, buildFitSummaryForUser, fitColorToHex, fitZoneLabel } from "../utils/fitCopy";
 import { SocialLookCard } from "../components/SocialLookCard";
 import {
   AppScreen,
+  DebugPanel,
   FashionCard,
   InfoPill,
   JourneyStepper,
@@ -58,7 +60,7 @@ export function VtonResultScreen({
   const resultImageUrl = resolveApiUrl(result.result_url ?? null);
   const cardRef = useRef<ViewShot>(null);
   const buyUrl = getPreferredBuyUrl(source ?? null);
-  const fitSummary = buildFitSummary(fitZones);
+  const fitSummary = buildFitSummaryForUser(fitZones);
 
   async function handleShare() {
     if (!resultImageUrl) {
@@ -167,11 +169,14 @@ export function VtonResultScreen({
                     padding: 10,
                     borderRadius: 12,
                     borderLeftWidth: 6,
-                    borderLeftColor: colorToHex(z.color),
+                    borderLeftColor: fitColorToHex(z.color),
                   }}
                 >
-                  <Text style={{ color: fashionColors.text, fontWeight: "900" }}>{zoneLabel(z.zone)}</Text>
-                  <Text style={{ color: fashionColors.textSoft, lineHeight: 20 }}>{humanizeZoneMessage(z)}</Text>
+                  <Text style={{ color: fashionColors.text, fontWeight: "900" }}>{fitZoneLabel(z.zone)}</Text>
+                  <Text style={{ color: fashionColors.textSoft, lineHeight: 20 }}>{buildFitInsight(z)}</Text>
+                  <Text style={{ color: fashionColors.textMuted, marginTop: 4 }}>
+                    Diferença estimada: {z.difference_cm ?? "-"} cm
+                  </Text>
                 </View>
               ))}
             </View>
@@ -232,84 +237,18 @@ export function VtonResultScreen({
             <SecondaryButton label="Experimentar outra prévia" onPress={onBackToVton} />
           </View>
         </View>
+
+        <DebugPanel title="Execução técnica">
+          <Text style={{ color: fashionColors.textMuted, lineHeight: 20 }}>
+            Provider: {result.provider}{"\n"}
+            Modo: {result.mode_requested}{"\n"}
+            Fallback: {result.used_fallback ? "sim" : "não"}{"\n"}
+            Payload: {payload ? "preparado" : "indisponível"}
+          </Text>
+        </DebugPanel>
       </ScrollView>
     </AppScreen>
   );
-}
-
-function colorToHex(color: string): string {
-  switch (color) {
-    case "red":
-      return "#ef4444";
-    case "yellow":
-      return "#facc15";
-    case "green":
-      return "#22c55e";
-    case "blue":
-      return "#38bdf8";
-    case "gray":
-      return "#9ca3af";
-    default:
-      return "#8b5cf6";
-  }
-}
-
-function zoneLabel(zone: string): string {
-  switch (zone) {
-    case "chest":
-      return "Busto/tórax";
-    case "waist":
-      return "Cintura";
-    case "hip":
-      return "Quadril";
-    case "length":
-      return "Comprimento";
-    case "sleeve":
-      return "Manga";
-    case "biceps":
-      return "Bíceps";
-    case "top_length":
-      return "Comprimento superior";
-    case "inseam":
-      return "Entrepernas";
-    case "thigh":
-      return "Coxa";
-    case "shoulder":
-      return "Ombros";
-    default:
-      return zone;
-  }
-}
-
-function buildFitSummary(fitZones: FitZone[]): string {
-  if (fitZones.length === 0) return "Ainda não avaliamos o caimento desta peça.";
-
-  const lowEase = fitZones.filter((zone) =>
-    zone.status === "apertado" || zone.status === "too_small" || zone.status === "tight" || zone.color === "red"
-  ).length;
-
-  const close = fitZones.filter((zone) =>
-    zone.status === "justo" || zone.status === "balanced" || zone.color === "yellow"
-  ).length;
-
-  const relaxed = fitZones.filter((zone) =>
-    zone.status === "folgado" || zone.status === "loose" || zone.color === "green" || zone.color === "blue"
-  ).length;
-
-  if (lowEase > 0) return "Algumas regiões podem ter pouca folga. Vale conferir tecido, elasticidade e sua preferência de caimento.";
-  if (close > 0) return "A peça tende a ficar mais próxima ao corpo em algumas regiões.";
-  if (relaxed > 0) return "A peça tende a ter folga confortável na maior parte do look.";
-
-  return "Caimento estimado com as medidas disponíveis.";
-}
-
-function humanizeZoneMessage(zone: FitZone): string {
-  if (zone.color === "red") return "Pode ter pouca folga nessa região.";
-  if (zone.color === "yellow") return "Deve ficar mais próximo ao corpo.";
-  if (zone.color === "green") return "Tende a ter folga confortável.";
-  if (zone.color === "blue") return "Tende a ficar mais solto.";
-  if (zone.color === "gray") return "A loja não informou medida suficiente para esta região.";
-  return zone.message;
 }
 
 export default VtonResultScreen;

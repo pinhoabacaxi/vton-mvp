@@ -4,6 +4,7 @@ import {
   AppScreen,
   FashionCard,
   JourneyStepper,
+  MeasurementGuideAccordion,
   MeasurementInput,
   PrimaryButton,
   StepHeader,
@@ -129,12 +130,35 @@ export function FineTuneScreen({ initial, selectedModel, onSubmit }: Props) {
 
           {advancedOpen ? (
             <View style={{ gap: 14 }}>
-              <MeasurementInput label="Ombros" value={shoulder} onChangeText={setShoulder} hint="Meça de um ossinho do ombro ao outro." estimatedValue={estimates.shoulder} />
-              <MeasurementInput label="Comprimento da manga" value={sleeve} onChangeText={setSleeve} hint="Do ossinho do ombro ao pulso." estimatedValue={estimates.sleeve} />
-              <MeasurementInput label="Bíceps" value={biceps} onChangeText={setBiceps} hint="Circunferência da parte mais larga do braço." estimatedValue={estimates.biceps} />
-              <MeasurementInput label="Comprimento superior" value={topLength} onChangeText={setTopLength} hint="Do ombro até a barra de uma blusa." estimatedValue={estimates.topLength} />
-              <MeasurementInput label="Entrepernas" value={inseam} onChangeText={setInseam} hint="Da virilha até o tornozelo." estimatedValue={estimates.inseam} />
-              <MeasurementInput label="Coxa" value={thigh} onChangeText={setThigh} hint="Circunferência da parte alta da coxa." estimatedValue={estimates.thigh} />
+              <MeasurementGuideAccordion
+                title="Ombros"
+                description="Meça de um ossinho do ombro ao outro, com a fita reta nas costas."
+                illustrationKey="shoulders"
+              />
+              <MeasurementInput label="Ombros" value={shoulder} onChangeText={setShoulder} estimatedValue={estimates.shoulder} />
+
+              <MeasurementGuideAccordion
+                title="Manga e braço"
+                description="Meça do ombro até o pulso, com o braço relaxado. Para bíceps, envolva a fita na parte mais larga do braço sem apertar."
+                illustrationKey="arm"
+              />
+              <MeasurementInput label="Comprimento da manga" value={sleeve} onChangeText={setSleeve} estimatedValue={estimates.sleeve} />
+              <MeasurementInput label="Bíceps" value={biceps} onChangeText={setBiceps} estimatedValue={estimates.biceps} />
+
+              <MeasurementGuideAccordion
+                title="Comprimento superior"
+                description="Meça do topo do ombro até onde a barra da blusa costuma terminar."
+                illustrationKey="top_length"
+              />
+              <MeasurementInput label="Comprimento superior" value={topLength} onChangeText={setTopLength} estimatedValue={estimates.topLength} />
+
+              <MeasurementGuideAccordion
+                title="Entrepernas e coxa"
+                description="Para entrepernas, meça da virilha até o tornozelo pela parte interna da perna. Para coxa, envolva a fita na parte mais larga."
+                illustrationKey="legs"
+              />
+              <MeasurementInput label="Entrepernas" value={inseam} onChangeText={setInseam} estimatedValue={estimates.inseam} />
+              <MeasurementInput label="Coxa" value={thigh} onChangeText={setThigh} estimatedValue={estimates.thigh} />
             </View>
           ) : null}
         </FashionCard>

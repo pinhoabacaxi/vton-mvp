@@ -6,6 +6,7 @@ import {
   FashionCard,
   InfoPill,
   JourneyStepper,
+  PremiumEmptyState,
   PrimaryButton,
   SecondaryButton,
   StepHeader,
@@ -23,12 +24,14 @@ type Props = {
     product?: ProductScrapeResult | null;
   }) => void;
   onBack: () => void;
+  onUploadPhoto?: () => void;
 };
 
-export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, onBack }: Props) {
+export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, onBack, onUploadPhoto }: Props) {
   const [url, setUrl] = useState(initialUrl ?? "");
   const [loading, setLoading] = useState(false);
   const [product, setProduct] = useState<ProductScrapeResult | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   function detectSourceName(u: string): string | null {
     try {
@@ -46,6 +49,7 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
     }
 
     setLoading(true);
+    setLinkError(null);
     try {
       const result = await scrapeProduct(url.trim());
       setProduct(result);
@@ -59,10 +63,7 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
         product: result,
       });
     } catch (err) {
-      Alert.alert(
-        "Não conseguimos ler esse link",
-        err instanceof Error ? err.message : "Tente outro link ou envie uma foto da peça."
-      );
+      setLinkError(err instanceof Error ? err.message : "Tente outro link ou envie uma foto da peça.");
     } finally {
       setLoading(false);
     }
@@ -86,7 +87,10 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
           <Text style={{ color: fashionColors.text, fontWeight: "900" }}>Link da peça</Text>
           <TextInput
             value={url}
-            onChangeText={setUrl}
+            onChangeText={(value) => {
+              setUrl(value);
+              setLinkError(null);
+            }}
             placeholder="https://loja.com/produto"
             placeholderTextColor="#9b86b8"
             autoCapitalize="none"
@@ -98,6 +102,7 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
               borderRadius: 14,
               borderWidth: 1,
               borderColor: fashionColors.borderStrong,
+              minHeight: 52,
             }}
           />
           <PrimaryButton
@@ -106,6 +111,18 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
             loading={loading}
           />
         </FashionCard>
+
+        {linkError ? (
+          <PremiumEmptyState
+            variant="linkError"
+            title="Não conseguimos ler este link."
+            description="Confira se a URL aponta para uma página pública de produto. Você também pode enviar uma foto da peça."
+            actionLabel="Tentar outro link"
+            onAction={() => setLinkError(null)}
+            secondaryActionLabel={onUploadPhoto ? "Enviar foto da peça" : "Voltar ao provador"}
+            onSecondaryAction={onUploadPhoto ?? onBack}
+          />
+        ) : null}
 
         {product ? (
           <FashionCard highlighted>

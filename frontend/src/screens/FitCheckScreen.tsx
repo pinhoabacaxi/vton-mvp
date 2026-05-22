@@ -1,6 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   ScrollView,
   Text,
@@ -21,6 +20,7 @@ import { Mannequin3D } from "../components/Mannequin3D";
 import { MannequinParams } from "../types/body";
 import { FitCheckResult, ProductScrapeResult, SizeMeasurement } from "../types/product";
 import { buildFitCacheKey, loadFitCache, saveFitCache } from "../storage/fitCacheStorage";
+import { buildFitInsight, buildFitSummaryForUser, buildSizeRecommendationText, fitColorToHex, fitZoneLabel } from "../utils/fitCopy";
 
 type Props = {
   mannequin: MannequinParams;
@@ -230,7 +230,11 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
             </Text>
 
             <Text style={{ color: "#d8c7ff" }}>
-              {displayResult.summary}
+              {buildFitSummaryForUser(displayResult.zones)}
+            </Text>
+
+            <Text style={{ color: fashionColors.gold, fontWeight: "800", lineHeight: 20 }}>
+              {buildSizeRecommendationText(displayResult)}
             </Text>
 
             {displayResult.best_size_label ? (
@@ -257,15 +261,15 @@ export function FitCheckScreen({ mannequin, product, onContinue, onFitComplete }
                   borderRadius: 14,
                   padding: 12,
                   borderLeftWidth: 6,
-                  borderLeftColor: colorToHex(zone.color),
+                  borderLeftColor: fitColorToHex(zone.color),
                 }}
               >
                 <Text style={{ color: "white", fontWeight: "800" }}>
-                  {zoneLabel(zone.zone)}
+                  {fitZoneLabel(zone.zone)}
                 </Text>
 
                 <Text style={{ color: "#d8c7ff", marginTop: 4 }}>
-                  {zone.message}
+                  {buildFitInsight(zone)}
                 </Text>
 
                 <Text style={{ color: "#c4b5fd", marginTop: 4 }}>
@@ -316,6 +320,8 @@ function SegmentedControl(props: {
               borderRadius: 12,
               paddingHorizontal: 10,
               paddingVertical: 8,
+              minHeight: 48,
+              justifyContent: "center",
             }}
           >
             <Text style={{ color: "white", fontWeight: "700" }}>{label}</Text>
@@ -352,6 +358,8 @@ function SizeToggle(props: {
                 borderRadius: 12,
                 paddingHorizontal: 10,
                 paddingVertical: 8,
+                minHeight: 48,
+                justifyContent: "center",
               }}
             >
               <Text style={{ color: "white", fontWeight: "800" }}>
@@ -453,6 +461,9 @@ function Legend() {
       <LegendItem color="#22c55e" label="Folga confortável" />
       <LegendItem color="#38bdf8" label="Caimento solto" />
       <LegendItem color="#9ca3af" label="Medida não informada pela loja" />
+      <Text style={{ color: "#d8c7ff", fontSize: 12, lineHeight: 18 }}>
+        Padrões no manequim: hachuras indicam pouca folga; traços indicam folga; pontos indicam medida não informada.
+      </Text>
     </View>
   );
 }
@@ -474,52 +485,4 @@ function LegendItem(props: { color: string; label: string }) {
       </Text>
     </View>
   );
-}
-
-function colorToHex(color: string): string {
-  switch (color) {
-    case "red":
-      return "#ef4444";
-    case "yellow":
-      return "#f59e0b";
-    case "green":
-      return "#22c55e";
-    case "blue":
-      return "#38bdf8";
-    case "gray":
-      return "#9ca3af";
-    default:
-      return "#8b5cf6";
-  }
-}
-
-function zoneLabel(zone: string): string {
-  switch (zone) {
-    case "chest":
-      return "Busto/tórax";
-    case "waist":
-      return "Cintura";
-    case "hip":
-      return "Quadril";
-    case "length":
-      return "Comprimento";
-    case "sleeve":
-      return "Manga";
-    case "biceps":
-      return "Bíceps";
-    case "top_length":
-      return "Comprimento superior";
-    case "inseam":
-      return "Entrepernas";
-    case "thigh":
-      return "Coxa";
-    case "shoulder":
-      return "Ombros";
-    case "rise":
-      return "Gancho";
-    case "wrist":
-      return "Punho";
-    default:
-      return zone;
-  }
 }

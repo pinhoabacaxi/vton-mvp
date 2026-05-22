@@ -329,6 +329,7 @@ export default function App() {
                   }}
                   onContinue={() => props.navigation.navigate("FitCheck")}
                   onBack={() => props.navigation.navigate("Preview")}
+                  onUploadPhoto={() => props.navigation.navigate("GarmentUpload")}
                 />
               ) : (
                 <MissingFlowScreen

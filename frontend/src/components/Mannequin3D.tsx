@@ -63,6 +63,16 @@ function isTight(zoneName: string, zones?: FitZone[]): boolean {
   return zone?.status === "apertado" || zone?.color === "red";
 }
 
+function isUnknown(zoneName: string, zones?: FitZone[]): boolean {
+  const zone = heatZone(zoneName, zones);
+  return zone?.status === "sem_informacao" || zone?.status === "unknown" || zone?.color === "gray";
+}
+
+function isRelaxed(zoneName: string, zones?: FitZone[]): boolean {
+  const zone = heatZone(zoneName, zones);
+  return zone?.status === "folgado" || zone?.status === "loose" || zone?.color === "green" || zone?.color === "blue";
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -75,6 +85,40 @@ function HatchOverlay(props: { position: [number, number, number]; width: number
         <mesh key={offset} position={[offset, 0, 0.07]}>
           <boxGeometry args={[0.018, props.height, 0.012]} />
           <meshStandardMaterial color="#1f102f" transparent opacity={0.55} roughness={0.96} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function DotOverlay(props: { position: [number, number, number]; width: number; height: number }) {
+  const dots = [
+    [-0.12, -0.1],
+    [0, 0],
+    [0.12, 0.1],
+  ];
+
+  return (
+    <group position={props.position}>
+      {dots.map(([x, y]) => (
+        <mesh key={`${x}-${y}`} position={[x * props.width, y * props.height, 0.08]}>
+          <sphereGeometry args={[0.018, 16, 10]} />
+          <meshStandardMaterial color="#f8f3ff" transparent opacity={0.72} roughness={0.96} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function DashOverlay(props: { position: [number, number, number]; width: number; height: number }) {
+  const offsets = [-0.12, 0.12];
+
+  return (
+    <group position={props.position}>
+      {offsets.map((offset) => (
+        <mesh key={offset} position={[0, offset * props.height, 0.08]}>
+          <boxGeometry args={[Math.max(0.12, props.width * 0.26), 0.015, 0.012]} />
+          <meshStandardMaterial color="#f8f3ff" transparent opacity={0.48} roughness={0.96} />
         </mesh>
       ))}
     </group>
@@ -109,6 +153,14 @@ function BodyMesh({
   const hipTight = isTight("hip", fitZones);
   const bicepsTight = isTight("biceps", fitZones);
   const thighTight = isTight("thigh", fitZones);
+  const chestUnknown = isUnknown("chest", fitZones);
+  const waistUnknown = isUnknown("waist", fitZones);
+  const hipUnknown = isUnknown("hip", fitZones);
+  const bicepsUnknown = isUnknown("biceps", fitZones);
+  const thighUnknown = isUnknown("thigh", fitZones);
+  const chestRelaxed = isRelaxed("chest", fitZones);
+  const waistRelaxed = isRelaxed("waist", fitZones);
+  const hipRelaxed = isRelaxed("hip", fitZones);
 
   return (
     <group rotation={[0, rotationY, 0]} scale={[0.9, 0.9 * legScale, 0.9]} position={[0, -0.24, 0]}>
@@ -150,6 +202,8 @@ function BodyMesh({
         <meshStandardMaterial color={chestColor} transparent opacity={heatOpacity("chest", fitZones)} roughness={0.9} />
       </mesh>
       {chestTight ? <HatchOverlay position={[0, 1.12, 0.12]} width={chestWidth} height={0.62} /> : null}
+      {chestUnknown ? <DotOverlay position={[0, 1.12, 0.12]} width={chestWidth} height={0.62} /> : null}
+      {chestRelaxed ? <DashOverlay position={[0, 1.12, 0.12]} width={chestWidth} height={0.62} /> : null}
 
       <mesh position={[0, 0.78, 0]} scale={[waistWidth, 0.76, 0.5]}>
         <capsuleGeometry args={[0.2, 0.18, 16, 36]} />
@@ -160,6 +214,8 @@ function BodyMesh({
         <meshStandardMaterial color={waistColor} transparent opacity={heatOpacity("waist", fitZones)} roughness={0.9} />
       </mesh>
       {waistTight ? <HatchOverlay position={[0, 0.78, 0.12]} width={waistWidth} height={0.42} /> : null}
+      {waistUnknown ? <DotOverlay position={[0, 0.78, 0.12]} width={waistWidth} height={0.42} /> : null}
+      {waistRelaxed ? <DashOverlay position={[0, 0.78, 0.12]} width={waistWidth} height={0.42} /> : null}
 
       <mesh position={[0, 0.52, 0]} scale={[hipWidth, 0.38, 0.48]}>
         <sphereGeometry args={[0.38, 48, 30]} />
@@ -170,6 +226,8 @@ function BodyMesh({
         <meshStandardMaterial color={hipColor} transparent opacity={heatOpacity("hip", fitZones)} roughness={0.9} />
       </mesh>
       {hipTight ? <HatchOverlay position={[0, 0.52, 0.13]} width={hipWidth} height={0.48} /> : null}
+      {hipUnknown ? <DotOverlay position={[0, 0.52, 0.13]} width={hipWidth} height={0.48} /> : null}
+      {hipRelaxed ? <DashOverlay position={[0, 0.52, 0.13]} width={hipWidth} height={0.48} /> : null}
 
       <mesh position={[-0.12, 0.34, 0.01]} scale={[1.05 * thighScale, 0.72, 0.9 * thighScale]} rotation={[0, 0, 0.06]}>
         <capsuleGeometry args={[0.088, 0.48, 12, 28]} />
@@ -192,6 +250,12 @@ function BodyMesh({
         <>
           <HatchOverlay position={[-0.12, 0.34, 0.13]} width={0.2} height={0.42} />
           <HatchOverlay position={[0.12, 0.34, 0.13]} width={0.2} height={0.42} />
+        </>
+      ) : null}
+      {thighUnknown ? (
+        <>
+          <DotOverlay position={[-0.12, 0.34, 0.13]} width={0.2} height={0.42} />
+          <DotOverlay position={[0.12, 0.34, 0.13]} width={0.2} height={0.42} />
         </>
       ) : null}
 
@@ -246,6 +310,12 @@ function BodyMesh({
         <>
           <HatchOverlay position={[-shoulderWidth - 0.05, 1.08, 0.13]} width={0.16} height={0.34} />
           <HatchOverlay position={[shoulderWidth + 0.05, 1.08, 0.13]} width={0.16} height={0.34} />
+        </>
+      ) : null}
+      {bicepsUnknown ? (
+        <>
+          <DotOverlay position={[-shoulderWidth - 0.05, 1.08, 0.13]} width={0.16} height={0.34} />
+          <DotOverlay position={[shoulderWidth + 0.05, 1.08, 0.13]} width={0.16} height={0.34} />
         </>
       ) : null}
 
