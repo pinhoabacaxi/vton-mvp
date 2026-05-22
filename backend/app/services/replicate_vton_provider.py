@@ -187,9 +187,10 @@ async def _create_prediction(
 
     async with httpx.AsyncClient(timeout=120) as client:
         if version:
-            response = await client.post(
-                f"{REPLICATE_BASE_URL}/predictions",
-                json={
+            response = await _post_prediction_with_retry(
+                client=client,
+                url=f"{REPLICATE_BASE_URL}/predictions",
+                body={
                     "version": version,
                     "input": input_data,
                 },
@@ -201,7 +202,12 @@ async def _create_prediction(
                 "input": input_data,
             }
 
-            response = await client.post(url, json=body, headers=headers)
+            response = await _post_prediction_with_retry(
+                client=client,
+                url=url,
+                body=body,
+                headers=headers,
+            )
 
             if response.status_code == 404:
                 latest_version = await _resolve_latest_model_version(
@@ -209,9 +215,10 @@ async def _create_prediction(
                     model=model,
                     headers=headers,
                 )
-                response = await client.post(
-                    f"{REPLICATE_BASE_URL}/predictions",
-                    json={
+                response = await _post_prediction_with_retry(
+                    client=client,
+                    url=f"{REPLICATE_BASE_URL}/predictions",
+                    body={
                         "version": latest_version,
                         "input": input_data,
                     },
@@ -223,7 +230,12 @@ async def _create_prediction(
                 "version": version,
                 "input": input_data,
             }
-            response = await client.post(url, json=body, headers=headers)
+            response = await _post_prediction_with_retry(
+                client=client,
+                url=url,
+                body=body,
+                headers=headers,
+            )
 
     if response.status_code >= 400:
         raise ReplicateProviderError(
@@ -231,6 +243,45 @@ async def _create_prediction(
         )
 
     return response.json()
+
+
+async def _post_prediction_with_retry(
+    client: httpx.AsyncClient,
+    url: str,
+    body: Dict[str, Any],
+    headers: Dict[str, str],
+) -> httpx.Response:
+    max_retries = _env_int("REPLICATE_CREATE_MAX_RETRIES", 2)
+
+    for attempt in range(max_retries + 1):
+        response = await client.post(url, json=body, headers=headers)
+
+        if response.status_code != 429 or attempt >= max_retries:
+            return response
+
+        await asyncio.sleep(_replicate_retry_after_seconds(response))
+
+    return response
+
+
+def _replicate_retry_after_seconds(response: httpx.Response) -> float:
+    header_value = response.headers.get("retry-after") or response.headers.get("Retry-After")
+    if header_value:
+        try:
+            return max(1.0, min(30.0, float(header_value)))
+        except ValueError:
+            pass
+
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+
+    retry_after = data.get("retry_after") if isinstance(data, dict) else None
+    try:
+        return max(1.0, min(30.0, float(retry_after)))
+    except (TypeError, ValueError):
+        return 10.0
 
 
 async def _resolve_latest_model_version(
