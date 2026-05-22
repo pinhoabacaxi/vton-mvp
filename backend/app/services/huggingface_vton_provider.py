@@ -36,11 +36,18 @@ async def run_huggingface_vton(payload: VtonPayload) -> Dict[str, Any]:
         "garment_processed_url",
     )
 
-    raw_result = await asyncio.to_thread(
-        _call_space,
-        person_url=person_url,
-        garment_url=garment_url,
-    )
+    try:
+        raw_result = await asyncio.to_thread(
+            _call_space,
+            person_url=person_url,
+            garment_url=garment_url,
+        )
+    except HuggingFaceProviderError:
+        raise
+    except Exception as error:
+        raise HuggingFaceProviderError(
+            f"Hugging Face Space falhou: {type(error).__name__}: {error}"
+        ) from error
 
     serialized_output = _serialize_gradio_value(raw_result)
     output_items = _as_sequence(serialized_output)
@@ -73,7 +80,12 @@ def extract_huggingface_result_url(raw_response: Dict[str, Any]) -> Optional[str
 
 def _call_space(person_url: str, garment_url: str) -> Any:
     try:
-        from gradio_client import Client, file
+        from gradio_client import Client
+
+        try:
+            from gradio_client import handle_file as gradio_file
+        except ImportError:
+            from gradio_client import file as gradio_file
     except ImportError as error:
         raise HuggingFaceProviderError(
             "gradio_client nao instalado. Execute pip install -r requirements.txt."
@@ -87,11 +99,11 @@ def _call_space(person_url: str, garment_url: str) -> Any:
 
     return client.predict(
         dict={
-            "background": file(person_url),
+            "background": gradio_file(person_url),
             "layers": [],
             "composite": None,
         },
-        garm_img=file(garment_url),
+        garm_img=gradio_file(garment_url),
         garment_des=_env_str(
             "HF_GARMENT_DESCRIPTION",
             "clothing item for virtual try-on",
