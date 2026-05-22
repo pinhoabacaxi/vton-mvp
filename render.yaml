@@ -23,3 +23,15 @@ services:
         value: "180"
       - key: REPLICATE_POLL_INTERVAL_SECONDS
         value: "3"
+      - key: HF_API_TOKEN
+        sync: false
+      - key: HF_SPACE_ID
+        value: yisol/IDM-VTON
+      - key: HF_SPACE_API_NAME
+        value: /tryon
+      - key: HF_DENOISE_STEPS
+        value: "30"
+      - key: HF_SEED
+        value: "42"
+      - key: HF_GARMENT_DESCRIPTION
+        value: clothing item for virtual try-on

@@ -28,6 +28,13 @@ from app.services.external_vton_provider import (
     is_external_vton_configured,
     run_external_vton,
 )
+from app.services.huggingface_vton_provider import (
+    HuggingFaceNotConfigured,
+    HuggingFaceProviderError,
+    extract_huggingface_result_url,
+    is_huggingface_configured,
+    run_huggingface_vton,
+)
 from app.services.image_processor import UPLOAD_DIR, normalize_garment_visual
 from app.services.mannequin_renderer import CANVAS_SIZE, render_mannequin_scene
 from app.services.url_utils import absolute_url
@@ -181,30 +188,27 @@ async def run_vton(data: VtonRunInput) -> VtonRunResult:
         return await _run_external_only(data, provider)
 
     if data.mode == "auto":
+        fallback_errors = []
+
         if is_external_vton_configured():
             try:
                 return await _run_external_only(data, provider)
             except Exception as error:
                 LOGGER.warning(
-                    "External VTON provider failed; using local mock fallback: %s",
+                    "External VTON provider failed; trying Hugging Face fallback: %s",
                     error,
                 )
-                mock = create_mock_vton_result(VtonMockInput(payload=data.payload))
+                fallback_errors.append(_fallback_error(provider, error))
 
-                return VtonRunResult(
-                    result_url=mock.result_url,
-                    result_path=mock.result_path,
-                    provider="local_mock",
-                    mode_requested=data.mode,
-                    status="succeeded",
-                    used_fallback=True,
-                    success=True,
-                    message=(
-                        "A prévia realista não ficou disponível agora. "
-                        "Geramos uma prévia rápida para você continuar."
-                    ),
-                    raw_response=None,
+        if is_huggingface_configured():
+            try:
+                return await _run_huggingface_only(data)
+            except (HuggingFaceNotConfigured, HuggingFaceProviderError, Exception) as error:
+                LOGGER.warning(
+                    "Hugging Face VTON provider failed; using local mock fallback: %s",
+                    error,
                 )
+                fallback_errors.append(_fallback_error("huggingface", error))
 
         mock = create_mock_vton_result(VtonMockInput(payload=data.payload))
 
@@ -217,10 +221,10 @@ async def run_vton(data: VtonRunInput) -> VtonRunResult:
             used_fallback=True,
             success=True,
             message=(
-                "A prévia realista ainda não está configurada. "
-                "Geramos uma prévia rápida para você continuar."
+                "Prévia realista indisponível no momento. "
+                "Mostramos uma prévia estimada para você continuar."
             ),
-            raw_response=None,
+            raw_response={"fallback_errors": fallback_errors} if fallback_errors else None,
         )
 
     mock = create_mock_vton_result(VtonMockInput(payload=data.payload))
@@ -325,6 +329,38 @@ async def _run_external_only(data: VtonRunInput, provider: str) -> VtonRunResult
         message=f"Resultado VTON externo recebido com sucesso via {provider}.",
         raw_response=raw_response,
     )
+
+
+async def _run_huggingface_only(data: VtonRunInput) -> VtonRunResult:
+    public_payload = _ensure_public_vton_assets(data.payload)
+    raw_response = await run_huggingface_vton(public_payload)
+    result_url = extract_huggingface_result_url(raw_response)
+
+    if not result_url:
+        raise ExternalVtonProviderError(
+            "Hugging Face respondeu, mas nenhuma URL de resultado foi encontrada."
+        )
+
+    return VtonRunResult(
+        result_url=absolute_url(result_url),
+        result_path=None,
+        provider="huggingface",
+        mode_requested=data.mode,
+        status=raw_response.get("status"),
+        used_fallback=False,
+        success=True,
+        message="Prévia realista gerada via Hugging Face Spaces.",
+        raw_response=raw_response,
+    )
+
+
+def _fallback_error(provider: str, error: Exception) -> Dict[str, str]:
+    message = str(error)
+    return {
+        "provider": provider,
+        "error_type": type(error).__name__,
+        "message": message[:500],
+    }
 
 
 def _ensure_public_vton_assets(payload: VtonPayload) -> VtonPayload:
