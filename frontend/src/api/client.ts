@@ -6,6 +6,7 @@ import {
 } from "../config/api";
 import {
   BodyRecommendationResponse,
+  BodyModelPreviewsResponse,
   FineTuneInput,
   InitialBodyInput,
   MannequinParams,
@@ -15,6 +16,8 @@ import {
   GarmentUploadResult,
   FitCheckInput,
   FitCheckResult,
+  FitFeedbackInput,
+  FitFeedbackResult,
 } from "../types/product";
 import {
   VtonPrepareInput,
@@ -115,6 +118,12 @@ export async function recommendBodyModels(
   });
 }
 
+export async function getBodyModelPreviews(): Promise<BodyModelPreviewsResponse> {
+  return request<BodyModelPreviewsResponse>("/body/model-previews", {
+    method: "GET",
+  });
+}
+
 export async function generateMannequin(
   data: FineTuneInput
 ): Promise<MannequinParams> {
@@ -174,6 +183,15 @@ export async function checkFit(
   data: FitCheckInput
 ): Promise<FitCheckResult> {
   return request<FitCheckResult>("/fit/check", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function submitFitFeedback(
+  data: FitFeedbackInput
+): Promise<FitFeedbackResult> {
+  return request<FitFeedbackResult>("/fit/feedback", {
     method: "POST",
     body: JSON.stringify(data),
   });

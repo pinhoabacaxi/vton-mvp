@@ -75,6 +75,8 @@ export function VtonResultScreen({
         return "#facc15";
       case "green":
         return "#22c55e";
+      case "blue":
+        return "#38bdf8";
       case "gray":
         return "#9ca3af";
       default:
@@ -90,6 +92,20 @@ export function VtonResultScreen({
         return "Cintura";
       case "hip":
         return "Quadril";
+      case "length":
+        return "Comprimento";
+      case "sleeve":
+        return "Manga";
+      case "biceps":
+        return "Bíceps";
+      case "top_length":
+        return "Comprimento superior";
+      case "inseam":
+        return "Entrepernas";
+      case "thigh":
+        return "Coxa";
+      case "shoulder":
+        return "Ombros";
       default:
         return zone;
     }
@@ -99,15 +115,15 @@ export function VtonResultScreen({
     if (fitZones.length === 0) return "Caimento ainda não avaliado.";
 
     const tight = fitZones.filter((zone) =>
-      zone.status === "too_small" || zone.status === "tight" || zone.color === "red"
+      zone.status === "apertado" || zone.status === "too_small" || zone.status === "tight" || zone.color === "red"
     ).length;
 
     const balanced = fitZones.filter((zone) =>
-      zone.status === "balanced" || zone.color === "yellow"
+      zone.status === "justo" || zone.status === "balanced" || zone.color === "yellow"
     ).length;
 
     const loose = fitZones.filter((zone) =>
-      zone.status === "loose" || zone.color === "green"
+      zone.status === "folgado" || zone.status === "loose" || zone.color === "green" || zone.color === "blue"
     ).length;
 
     if (tight > 0) return "Atenção: algumas regiões podem ficar apertadas.";

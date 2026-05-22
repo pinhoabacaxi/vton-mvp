@@ -1,5 +1,5 @@
-import os
 import asyncio
+import os
 import time
 from typing import Any, Dict, Optional
 
@@ -32,13 +32,18 @@ def _get_headers() -> Dict[str, str]:
     token = os.getenv("REPLICATE_API_TOKEN", "").strip()
 
     if not token:
-        raise ReplicateNotConfigured("REPLICATE_API_TOKEN não configurado.")
+        raise ReplicateNotConfigured("REPLICATE_API_TOKEN nao configurado.")
 
-    return {
+    headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
-        "Prefer": "wait",
     }
+
+    prefer_wait = os.getenv("REPLICATE_PREFER_WAIT", "false").strip().lower()
+    if prefer_wait in {"1", "true", "yes", "sim"}:
+        headers["Prefer"] = "wait"
+
+    return headers
 
 
 def _absolute_backend_url(path_or_url: Optional[str]) -> Optional[str]:
@@ -52,34 +57,82 @@ def _absolute_backend_url(path_or_url: Optional[str]) -> Optional[str]:
     return url
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+
+    return value.strip().lower() in {"1", "true", "yes", "sim"}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
 def _build_replicate_input(payload: VtonPayload) -> Dict[str, Any]:
     garment_url = _absolute_backend_url(payload.garment_processed_url)
     person_image_url = _absolute_backend_url(payload.person_image_url)
 
     if not garment_url:
         raise ReplicateProviderError(
-            "garment_processed_url não está acessível publicamente. "
+            "garment_processed_url nao esta acessivel publicamente. "
             "Configure PUBLIC_BACKEND_URL ou envie uma URL absoluta."
         )
 
+    if not person_image_url:
+        raise ReplicateProviderError(
+            "person_image_url nao esta acessivel publicamente. "
+            "O backend precisa gerar ou receber uma imagem HTTPS do manequim/pessoa."
+        )
+
     prompt = (
-        "Virtual try-on preview of the garment on a neutral front-facing mannequin. "
+        os.getenv("REPLICATE_GARMENT_PROMPT", "").strip()
+        or "Virtual try-on preview of the garment on a neutral front-facing mannequin. "
         "Preserve garment shape, fabric and color. Clean studio background."
     )
+    category = os.getenv("REPLICATE_GARMENT_CATEGORY", "upper_body").strip()
+    category = category or "upper_body"
+    schema = os.getenv("REPLICATE_INPUT_SCHEMA", "").strip().lower()
+    model_name = os.getenv("REPLICATE_MODEL", "").strip().lower()
+
+    if schema in {"idm_vton", "idm-vton"} or (not schema and "idm-vton" in model_name):
+        return {
+            "human_img": person_image_url,
+            "garm_img": garment_url,
+            "garment_des": prompt,
+            "category": category,
+            "is_checked": _env_bool("REPLICATE_USE_AUTO_MASK", True),
+            "is_checked_crop": _env_bool("REPLICATE_AUTO_CROP", False),
+            "denoise_steps": _env_int("REPLICATE_DENOISE_STEPS", 30),
+            "seed": _env_int("REPLICATE_SEED", 42),
+        }
 
     return {
         "person_image": person_image_url,
         "garment_image": garment_url,
-        "cloth_image": garment_url,
-        "garm_img": garment_url,
         "prompt": prompt,
-        "category": "upper_body",
+        "category": category,
         "fit_notes": [zone.model_dump() for zone in payload.fit_zones],
         "measurements": {
             "height_cm": payload.mannequin.height_cm,
             "chest_cm": payload.mannequin.chest_cm,
             "waist_cm": payload.mannequin.waist_cm,
             "hip_cm": payload.mannequin.hip_cm,
+            "shoulder_cm": payload.mannequin.shoulder_cm,
+            "sleeve_cm": payload.mannequin.sleeve_cm,
+            "biceps_cm": payload.mannequin.biceps_cm,
+            "top_length_cm": payload.mannequin.top_length_cm,
+            "inseam_cm": payload.mannequin.inseam_cm,
+            "thigh_cm": payload.mannequin.thigh_cm,
+            "rise_cm": payload.mannequin.rise_cm,
+            "wrist_cm": payload.mannequin.wrist_cm,
         },
     }
 
@@ -90,7 +143,7 @@ async def run_replicate_vton(payload: VtonPayload) -> Dict[str, Any]:
     version = os.getenv("REPLICATE_VERSION", "").strip()
 
     if not token:
-        raise ReplicateNotConfigured("REPLICATE_API_TOKEN não configurado.")
+        raise ReplicateNotConfigured("REPLICATE_API_TOKEN nao configurado.")
 
     if not model and not version:
         raise ReplicateNotConfigured("Configure REPLICATE_MODEL ou REPLICATE_VERSION.")
@@ -151,7 +204,7 @@ async def _create_prediction(
 async def _poll_prediction(prediction_id: str) -> Dict[str, Any]:
     headers = _get_headers()
 
-    timeout_seconds = int(os.getenv("REPLICATE_POLL_TIMEOUT_SECONDS", "180"))
+    timeout_seconds = _env_int("REPLICATE_POLL_TIMEOUT_SECONDS", 180)
     interval_seconds = float(os.getenv("REPLICATE_POLL_INTERVAL_SECONDS", "3"))
 
     deadline = time.time() + timeout_seconds

@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import unquote, urlparse
 from app.models.product import ProductScrapeResult
 from app.services.size_normalizer import normalize_size_text
+from app.services.fabric_physics import analyze_fabric_text, infer_stretch_level
 
 
 async def scrape_product_page(url: str) -> ProductScrapeResult:
@@ -39,6 +40,16 @@ async def scrape_product_page(url: str) -> ProductScrapeResult:
     price = _extract_price(soup)
     raw_size_text = _extract_possible_size_text(soup)
     normalized = normalize_size_text(raw_size_text or "")
+    fabric_text = _extract_fabric_composition(soup)
+    fabric_analysis = analyze_fabric_text(fabric_text)
+    inferred_stretch = infer_stretch_level(fabric_analysis)
+    if inferred_stretch:
+        normalized = [
+            size.model_copy(
+                update={"stretch_level": size.stretch_level or inferred_stretch}
+            )
+            for size in normalized
+        ]
 
     return ProductScrapeResult(
         source_url=url,
@@ -48,6 +59,8 @@ async def scrape_product_page(url: str) -> ProductScrapeResult:
         price=price,
         raw_size_text=raw_size_text,
         normalized_sizes=normalized,
+        fabric_composition_text=fabric_text,
+        fabric_analysis=fabric_analysis,
     )
 
 
@@ -147,9 +160,25 @@ def _extract_possible_size_text(soup: BeautifulSoup) -> str | None:
         "busto",
         "cintura",
         "quadril",
+        "comprimento",
+        "manga",
+        "bíceps",
+        "biceps",
+        "coxa",
+        "entrepernas",
+        "ombro",
+        "punho",
+        "gancho",
         "chest",
         "waist",
         "hip",
+        "length",
+        "sleeve",
+        "inseam",
+        "thigh",
+        "shoulder",
+        "wrist",
+        "rise",
     ]
 
     chunks = []
@@ -172,3 +201,28 @@ def _extract_possible_size_text(soup: BeautifulSoup) -> str | None:
     ]
 
     return "\n".join(possible_lines[:30]) if possible_lines else None
+
+
+def _extract_fabric_composition(soup: BeautifulSoup) -> str | None:
+    keywords = [
+        "composicao",
+        "composiÃƒÂ§ÃƒÂ£o",
+        "tecido",
+        "material",
+        "fabric",
+        "composition",
+        "algodao",
+        "algodÃƒÂ£o",
+        "cotton",
+        "viscose",
+        "elastano",
+        "elastane",
+        "spandex",
+        "lycra",
+        "polyester",
+        "poliester",
+    ]
+    text = soup.get_text("\n", strip=True)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    matches = [line for line in lines if any(keyword in line.lower() for keyword in keywords)]
+    return "\n".join(matches[:20]) if matches else None

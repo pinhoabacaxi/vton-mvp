@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { SafeAreaView, View, Text, TextInput, TouchableOpacity, Alert } from "react-native";
 import { scrapeProduct } from "../api/client";
+import { ProductScrapeResult } from "../types/product";
 
 type Props = {
   initialUrl?: string | null;
   onContinue: () => void;
-  onProductCaptured?: (data: { product_url: string; source_name?: string | null; product_title?: string | null }) => void;
+  onProductCaptured?: (data: { product_url: string; source_name?: string | null; product_title?: string | null; product?: ProductScrapeResult | null }) => void;
   onBack: () => void;
 };
 
@@ -40,6 +41,7 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
         product_url: result.source_url ?? url.trim(),
         source_name: sourceName,
         product_title: result.title ?? null,
+        product: result,
       });
 
       onContinue();
@@ -75,11 +77,19 @@ export function ProductUrlScreen({ initialUrl, onContinue, onProductCaptured, on
 
             <Text style={{ color: "#c4b5fd", marginTop: 6 }}>{product.source_url}</Text>
 
+            {product.fabric_analysis ? (
+              <Text style={{ color: "#c4b5fd", marginTop: 6 }}>
+                Tecido: stretch {Math.round((product.fabric_analysis.stretch_factor ?? 0) * 100)}% Ã¢â‚¬Â¢ encolhimento {Math.round((product.fabric_analysis.shrink_risk ?? 0) * 100)}%
+              </Text>
+            ) : null}
+
             {Array.isArray(product.normalized_sizes) && product.normalized_sizes.length > 0 ? (
               <View style={{ marginTop: 8 }}>
                 <Text style={{ color: "#d8c7ff", fontWeight: "700" }}>Tamanhos normalizados</Text>
                 {product.normalized_sizes.map((s: any, i: number) => (
-                  <Text key={i} style={{ color: "#c4b5fd" }}>• {s.size_label} — B:{s.chest_cm ?? '-'} C:{s.waist_cm ?? '-'} Q:{s.hip_cm ?? '-'}</Text>
+                  <Text key={i} style={{ color: "#c4b5fd" }}>
+                    • {s.size_label} — B:{s.chest_cm ?? '-'} C:{s.waist_cm ?? '-'} Q:{s.hip_cm ?? '-'} M:{s.sleeve_cm ?? '-'} Coxa:{s.thigh_cm ?? '-'} Entrep:{s.inseam_cm ?? '-'}
+                  </Text>
                 ))}
               </View>
             ) : null}

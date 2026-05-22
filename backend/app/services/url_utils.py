@@ -2,6 +2,9 @@ import os
 
 
 def absolute_url(path: str) -> str:
+    if not path:
+        return path
+
     if path.startswith(("http://", "https://")):
         return path
 

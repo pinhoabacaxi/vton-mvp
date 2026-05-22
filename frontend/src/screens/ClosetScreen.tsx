@@ -44,7 +44,7 @@ export default function ClosetScreen({
         <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
           <View style={{ flex: 1 }}>
             <Text style={{ color: "white", fontSize: 28, fontWeight: "800" }}>
-              Meu Armario
+              Meu Armário
             </Text>
             <Text style={{ color: "#d8c7ff", marginTop: 6 }}>
               Pecas recortadas ficam salvas para novos looks.

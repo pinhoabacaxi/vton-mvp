@@ -1,21 +1,24 @@
-﻿from pathlib import Path
-from uuid import uuid4
 import asyncio
+from io import BytesIO
+from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
+from uuid import uuid4
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
+from app.models.product import FitZone
 from app.models.vton import (
-    VtonPrepareInput,
-    VtonPayload,
     VtonMockInput,
     VtonMockResult,
+    VtonPayload,
+    VtonPrepareInput,
     VtonRunInput,
     VtonRunResult,
     VtonTaskCreated,
     VtonTaskStatusResponse,
 )
-from app.models.product import FitZone
 from app.services.external_vton_provider import (
     ExternalVtonNotConfigured,
     ExternalVtonProviderError,
@@ -24,14 +27,22 @@ from app.services.external_vton_provider import (
     is_external_vton_configured,
     run_external_vton,
 )
+from app.services.image_processor import UPLOAD_DIR, normalize_garment_visual
+from app.services.mannequin_renderer import CANVAS_SIZE, render_mannequin_scene
 from app.services.url_utils import absolute_url
+from app.services.vton_render_pipeline import (
+    GarmentRenderContext,
+    MannequinGarmentRenderer,
+)
 
 
-UPLOAD_DIR = Path("uploads")
 VTON_DIR = UPLOAD_DIR / "vton"
 VTON_DIR.mkdir(parents=True, exist_ok=True)
+PERSON_RENDER_DIR = UPLOAD_DIR / "mannequin"
+PERSON_RENDER_DIR.mkdir(parents=True, exist_ok=True)
 VTON_TASK_POLL_SECONDS = 2
 _VTON_TASKS: Dict[str, VtonTaskStatusResponse] = {}
+_GARMENT_RENDERER = MannequinGarmentRenderer()
 
 
 def prepare_vton_payload(data: VtonPrepareInput) -> VtonPayload:
@@ -52,15 +63,15 @@ def prepare_vton_payload(data: VtonPrepareInput) -> VtonPayload:
     )
 
     notes = [
-        "Payload preparado para integração futura com API VTON.",
-        "Para MVP, recomenda-se começar com render frontal 2D antes de tentar projeção 3D real.",
+        "Payload preparado para integracao futura com API VTON.",
+        "O mock local usa composicao por alpha, warp leve e sombra do manequim.",
     ]
 
     if data.fit_zones:
-        notes.append("Fit zones incluídas para futura orientação de caimento e heatmap.")
+        notes.append("Fit zones incluidas para futura orientacao de caimento e heatmap.")
 
     if garment_processed_url:
-        notes.append("Imagem de roupa sem fundo disponível para composição/VTON.")
+        notes.append("Imagem de roupa sem fundo disponivel para composicao/VTON.")
 
     if person_image_url:
         notes.append("Imagem frontal do manequim adicionada ao payload como person_image_url.")
@@ -72,6 +83,14 @@ def prepare_vton_payload(data: VtonPrepareInput) -> VtonPayload:
             "chest_cm": data.mannequin.chest_cm,
             "waist_cm": data.mannequin.waist_cm,
             "hip_cm": data.mannequin.hip_cm,
+            "shoulder_cm": data.mannequin.shoulder_cm,
+            "sleeve_cm": data.mannequin.sleeve_cm,
+            "biceps_cm": data.mannequin.biceps_cm,
+            "top_length_cm": data.mannequin.top_length_cm,
+            "inseam_cm": data.mannequin.inseam_cm,
+            "thigh_cm": data.mannequin.thigh_cm,
+            "rise_cm": data.mannequin.rise_cm,
+            "wrist_cm": data.mannequin.wrist_cm,
             "skin_tone": data.mannequin.skin_tone,
             "base_model_id": data.mannequin.base_model_id,
         },
@@ -110,20 +129,33 @@ def create_mock_vton_result(data: VtonMockInput) -> VtonMockResult:
     filename = f"vton_mock_{uuid4().hex}.png"
     output_path = VTON_DIR / filename
 
-    image = Image.new("RGBA", (900, 1200), "#170b25")
-    draw = ImageDraw.Draw(image)
+    image, body_alpha, body_shadow, body_light = render_mannequin_scene(
+        data.payload.mannequin,
+        size=CANVAS_SIZE,
+        include_label=False,
+    )
 
-    _draw_background(draw)
-    _draw_mannequin(draw, data.payload)
-    _draw_garment_overlay(draw, data.payload)
+    draw = ImageDraw.Draw(image)
+    draw.text((40, 40), "VTON MOCK", fill="#e9d5ff")
+    image = _apply_fit_heatmap_overlay(image, body_alpha, data.payload.fit_zones)
+
+    image = _composite_garment_on_body(
+        image=image,
+        body_alpha=body_alpha,
+        body_shadow=body_shadow,
+        body_light=body_light,
+        payload=data.payload,
+    )
+
+    draw = ImageDraw.Draw(image)
     _draw_fit_labels(draw, data.payload.fit_zones)
 
-    image.save(output_path, "PNG")
+    image.save(output_path, "PNG", optimize=True)
 
     return VtonMockResult(
         result_url=absolute_url(f"/uploads/vton/{filename}"),
         result_path=str(output_path),
-        message="Resultado VTON mock gerado com sucesso.",
+        message="Resultado VTON mock gerado com composicao organica.",
     )
 
 
@@ -177,7 +209,7 @@ async def run_vton(data: VtonRunInput) -> VtonRunResult:
             status="succeeded",
             used_fallback=True,
             success=True,
-            message="API VTON externa não configurada. Fallback mock usado.",
+            message="API VTON externa nao configurada. Fallback mock usado.",
             raw_response=None,
         )
 
@@ -191,7 +223,7 @@ async def run_vton(data: VtonRunInput) -> VtonRunResult:
         status="succeeded",
         used_fallback=True,
         success=True,
-        message="Modo inválido. Fallback mock usado.",
+        message="Modo invalido. Fallback mock usado.",
         raw_response=None,
     )
 
@@ -257,7 +289,8 @@ async def _execute_vton_task(task_id: str, data: VtonRunInput) -> None:
 
 
 async def _run_external_only(data: VtonRunInput, provider: str) -> VtonRunResult:
-    raw_response = await run_external_vton(data.payload)
+    public_payload = _ensure_public_vton_assets(data.payload)
+    raw_response = await run_external_vton(public_payload)
     result_url = extract_result_url(raw_response)
     status = None
 
@@ -284,82 +317,401 @@ async def _run_external_only(data: VtonRunInput, provider: str) -> VtonRunResult
     )
 
 
-def _draw_background(draw: ImageDraw.ImageDraw) -> None:
-    draw.rectangle((0, 0, 900, 1200), fill="#170b25")
-    draw.ellipse((-200, -160, 520, 520), fill="#3b1c5c")
-    draw.ellipse((420, 760, 1100, 1380), fill="#2e1065")
-    draw.text((40, 40), "VTON MOCK", fill="#e9d5ff")
+def _ensure_public_vton_assets(payload: VtonPayload) -> VtonPayload:
+    garment_processed_url = (
+        absolute_url(payload.garment_processed_url)
+        if payload.garment_processed_url
+        else None
+    )
+    garment_original_url = (
+        absolute_url(payload.garment_original_url)
+        if payload.garment_original_url
+        else None
+    )
+    person_image_url = (
+        absolute_url(payload.person_image_url)
+        if payload.person_image_url
+        else None
+    )
+
+    if not garment_processed_url and garment_original_url:
+        garment_processed_url = garment_original_url
+
+    if not person_image_url:
+        person_image_url = _create_public_person_image(payload)
+
+    api_ready_payload = dict(payload.api_ready_payload)
+    api_ready_payload["person_image_url"] = person_image_url
+
+    garment = dict(api_ready_payload.get("garment") or {})
+    garment["processed_url"] = garment_processed_url
+    garment["original_url"] = garment_original_url
+    api_ready_payload["garment"] = garment
+
+    return payload.model_copy(
+        update={
+            "garment_processed_url": garment_processed_url,
+            "garment_original_url": garment_original_url,
+            "person_image_url": person_image_url,
+            "api_ready_payload": api_ready_payload,
+        }
+    )
 
 
-def _draw_mannequin(draw: ImageDraw.ImageDraw, payload: VtonPayload) -> None:
+def _create_public_person_image(payload: VtonPayload) -> str:
+    filename = f"replicate_person_{uuid4().hex}.png"
+    output_path = PERSON_RENDER_DIR / filename
+
+    image, _, _, _ = render_mannequin_scene(
+        payload.mannequin,
+        size=CANVAS_SIZE,
+        include_label=False,
+    )
+    image.save(output_path, "PNG", optimize=True)
+
+    return absolute_url(f"/uploads/mannequin/{filename}")
+
+
+def _composite_garment_on_body(
+    image: Image.Image,
+    body_alpha: Image.Image,
+    body_shadow: Image.Image,
+    body_light: Image.Image,
+    payload: VtonPayload,
+) -> Image.Image:
+    garment = _load_processed_garment(payload.garment_processed_url)
+
+    if garment is None:
+        fallback = _build_parametric_garment_placeholder(payload)
+        fallback = _GARMENT_RENDERER.render(
+            fallback,
+            GarmentRenderContext(
+                mannequin=payload.mannequin,
+                body_alpha=body_alpha,
+                shadow_map_alpha=body_shadow,
+                light_map_rgba=body_light,
+                shadow_intensity=0.56,
+                highlight_intensity=0.34,
+                warp_strength=0.0,
+                bump_strength=0.0,
+                curve_hem=False,
+            ),
+        )
+        return Image.alpha_composite(image, fallback)
+
+    garment = normalize_garment_visual(_crop_to_alpha(garment))
+    if _alpha_is_mostly_opaque(garment):
+        garment = _apply_soft_garment_silhouette(garment)
+
+    garment, left, top = _fit_garment_to_body(garment, payload)
+
+    garment_box = (left, top, left + garment.width, top + garment.height)
+    garment = _GARMENT_RENDERER.render(
+        garment,
+        GarmentRenderContext(
+            mannequin=payload.mannequin,
+            body_alpha=body_alpha.crop(garment_box),
+            shadow_map_alpha=body_shadow.crop(garment_box),
+            light_map_rgba=body_light.crop(garment_box),
+            occlusion_mask_alpha=None,
+            shadow_intensity=0.62,
+            highlight_intensity=0.36,
+            warp_strength=1.0,
+            bump_strength=0.24,
+            curve_hem=True,
+        ),
+    )
+
+    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    layer.paste(garment, (left, top), garment)
+    return Image.alpha_composite(image, layer)
+
+
+def _load_processed_garment(path_or_url: Optional[str]) -> Optional[Image.Image]:
+    local_path = _resolve_upload_path(path_or_url)
+
+    if local_path and local_path.exists():
+        try:
+            with Image.open(local_path) as image:
+                return image.convert("RGBA")
+        except Exception:
+            return None
+
+    if path_or_url and path_or_url.startswith(("http://", "https://")):
+        return _download_garment_image(path_or_url)
+
+    return None
+
+
+def _download_garment_image(url: str) -> Optional[Image.Image]:
+    try:
+        request = Request(
+            url,
+            headers={"User-Agent": "VTON-MVP/1.0 image-preview"},
+        )
+        with urlopen(request, timeout=12) as response:
+            payload = response.read(8 * 1024 * 1024)
+
+        with Image.open(BytesIO(payload)) as image:
+            return image.convert("RGBA")
+    except Exception:
+        return None
+
+
+def _resolve_upload_path(path_or_url: Optional[str]) -> Optional[Path]:
+    if not path_or_url:
+        return None
+
+    parsed = urlparse(path_or_url)
+
+    if not parsed.scheme:
+        direct_path = Path(path_or_url)
+        if direct_path.exists():
+            return direct_path
+
+    normalized = parsed.path if parsed.scheme else path_or_url
+    normalized = normalized.replace("\\", "/")
+
+    if "uploads/" not in normalized:
+        return None
+
+    relative = normalized.split("uploads/", 1)[1].lstrip("/")
+    return UPLOAD_DIR / unquote(relative)
+
+
+def _crop_to_alpha(image: Image.Image) -> Image.Image:
+    rgba = image.convert("RGBA")
+    bbox = rgba.getchannel("A").getbbox()
+
+    if not bbox:
+        return rgba
+
+    margin = 10
+    left = max(0, bbox[0] - margin)
+    top = max(0, bbox[1] - margin)
+    right = min(rgba.width, bbox[2] + margin)
+    bottom = min(rgba.height, bbox[3] + margin)
+    return rgba.crop((left, top, right, bottom))
+
+
+def _alpha_is_mostly_opaque(image: Image.Image) -> bool:
+    alpha = image.getchannel("A")
+    extrema = alpha.getextrema()
+
+    if extrema[0] < 245:
+        return False
+
+    opaque_bbox = alpha.point(lambda value: 255 if value > 245 else 0).getbbox()
+    return opaque_bbox == (0, 0, image.width, image.height)
+
+
+def _apply_soft_garment_silhouette(image: Image.Image) -> Image.Image:
+    width, height = image.size
+    mask = Image.new("L", image.size, 0)
+    draw = ImageDraw.Draw(mask)
+
+    body_points = [
+        (width * 0.20, height * 0.08),
+        (width * 0.80, height * 0.08),
+        (width * 0.88, height * 0.32),
+        (width * 0.78, height * 0.88),
+        (width * 0.58, height * 0.98),
+        (width * 0.42, height * 0.98),
+        (width * 0.22, height * 0.88),
+        (width * 0.12, height * 0.32),
+    ]
+    draw.polygon([(int(x), int(y)) for x, y in body_points], fill=255)
+
+    left_sleeve = [
+        (width * 0.20, height * 0.10),
+        (width * 0.06, height * 0.20),
+        (width * 0.12, height * 0.48),
+        (width * 0.26, height * 0.40),
+    ]
+    right_sleeve = [(width - x, y) for x, y in left_sleeve]
+    draw.polygon([(int(x), int(y)) for x, y in left_sleeve], fill=255)
+    draw.polygon([(int(x), int(y)) for x, y in right_sleeve], fill=255)
+    draw.ellipse((width * 0.39, height * -0.04, width * 0.61, height * 0.18), fill=0)
+
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=max(1.0, width * 0.005)))
+    alpha = ImageChops.multiply(image.getchannel("A"), mask)
+    return Image.merge("RGBA", (*image.convert("RGB").split(), alpha))
+
+
+def _fit_garment_to_body(
+    garment: Image.Image,
+    payload: VtonPayload,
+) -> tuple[Image.Image, int, int]:
+    target_left, target_top, target_right, target_bottom = _garment_target_box(payload)
+    target_width = target_right - target_left
+    target_height = target_bottom - target_top
+
+    scale = min(
+        target_width / max(1, garment.width),
+        target_height / max(1, garment.height),
+    )
+    scale = max(0.1, scale)
+    new_size = (
+        max(1, int(garment.width * scale)),
+        max(1, int(garment.height * scale)),
+    )
+
+    resized = garment.resize(new_size, Image.Resampling.LANCZOS)
+    left = target_left + (target_width - resized.width) // 2
+    top = target_top + int((target_height - resized.height) * 0.18)
+    return resized, left, top
+
+
+def _garment_target_box(payload: VtonPayload) -> tuple[int, int, int, int]:
     mannequin = payload.mannequin
-    skin = _skin_color(mannequin.skin_tone)
+    center_x = CANVAS_SIZE[0] // 2
 
-    center_x = 450
-    head_y = 180
+    shoulder_half = int(172 * _bounded_scale(getattr(mannequin, "shoulder_scale", 1.0), 0.74, 1.32))
+    chest_half = int(164 * _bounded_scale(getattr(mannequin, "chest_scale", 1.0), 0.74, 1.36))
+    waist_half = int(122 * _bounded_scale(getattr(mannequin, "waist_scale", 1.0), 0.72, 1.42))
 
-    shoulder_width = int(210 * getattr(mannequin, "shoulder_scale", 1))
-    chest_width = int(190 * getattr(mannequin, "chest_scale", 1))
-    waist_width = int(145 * getattr(mannequin, "waist_scale", 1))
-    hip_width = int(205 * getattr(mannequin, "hip_scale", 1))
+    target_width = int(max(300, shoulder_half * 1.92, chest_half * 2.06, waist_half * 2.20))
+    target_width = min(500, target_width)
+    target_top = 310
+    target_bottom = 760
 
-    draw.ellipse((center_x - 65, head_y - 65, center_x + 65, head_y + 65), fill=skin)
-
-    draw.polygon(
-        [
-            (center_x - shoulder_width, 310),
-            (center_x + shoulder_width, 310),
-            (center_x + chest_width, 510),
-            (center_x + waist_width, 650),
-            (center_x - waist_width, 650),
-            (center_x - chest_width, 510),
-        ],
-        fill=skin,
+    return (
+        center_x - target_width // 2,
+        target_top,
+        center_x + target_width // 2,
+        target_bottom,
     )
 
-    draw.polygon(
-        [
-            (center_x - waist_width, 650),
-            (center_x + waist_width, 650),
-            (center_x + hip_width, 780),
-            (center_x + 90, 850),
-            (center_x - 90, 850),
-            (center_x - hip_width, 780),
-        ],
-        fill=skin,
+
+def _build_parametric_garment_placeholder(payload: VtonPayload) -> Image.Image:
+    mask = Image.new("L", CANVAS_SIZE, 0)
+    draw = ImageDraw.Draw(mask)
+    center_x = CANVAS_SIZE[0] // 2
+    left, top, right, bottom = _garment_target_box(payload)
+    width = right - left
+    height = bottom - top
+    hem_curve = int(height * 0.055)
+
+    points = [
+        (left + width * 0.18, top + height * 0.035),
+        (right - width * 0.18, top + height * 0.035),
+        (right - width * 0.08, top + height * 0.28),
+        (right - width * 0.13, top + height * 0.62),
+        (right - width * 0.20, bottom - hem_curve),
+        (center_x + width * 0.10, bottom),
+        (center_x - width * 0.10, bottom),
+        (left + width * 0.20, bottom - hem_curve),
+        (left + width * 0.13, top + height * 0.62),
+        (left + width * 0.08, top + height * 0.28),
+    ]
+
+    left_sleeve = [
+        (left + width * 0.19, top + height * 0.055),
+        (left - width * 0.02, top + height * 0.17),
+        (left + width * 0.04, top + height * 0.43),
+        (left + width * 0.25, top + height * 0.34),
+    ]
+    right_sleeve = [(center_x + (center_x - x), y) for x, y in left_sleeve]
+
+    draw.polygon([(int(x), int(y)) for x, y in points], fill=238)
+    draw.polygon([(int(x), int(y)) for x, y in left_sleeve], fill=238)
+    draw.polygon([(int(x), int(y)) for x, y in right_sleeve], fill=238)
+    draw.ellipse(
+        (
+            center_x - width * 0.125,
+            top - height * 0.030,
+            center_x + width * 0.125,
+            top + height * 0.130,
+        ),
+        fill=0,
     )
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=1.2))
 
-    draw.rounded_rectangle((center_x - 250, 320, center_x - 180, 760), radius=35, fill=skin)
-    draw.rounded_rectangle((center_x + 180, 320, center_x + 250, 760), radius=35, fill=skin)
+    base = Image.new("RGBA", CANVAS_SIZE, (122, 64, 188, 0))
+    base.putalpha(mask)
 
-    draw.rounded_rectangle((center_x - 110, 820, center_x - 35, 1110), radius=35, fill=skin)
-    draw.rounded_rectangle((center_x + 35, 820, center_x + 110, 1110), radius=35, fill=skin)
-
-
-def _draw_garment_overlay(draw: ImageDraw.ImageDraw, payload: VtonPayload) -> None:
-    center_x = 450
-    has_garment = payload.garment_processed_url is not None
-
-    garment_color = "#8b5cf6" if has_garment else "#6d28d9"
-    outline = "#f5d0fe"
-
-    draw.polygon(
-        [
-            (center_x - 210, 300),
-            (center_x + 210, 300),
-            (center_x + 170, 660),
-            (center_x + 95, 760),
-            (center_x - 95, 760),
-            (center_x - 170, 660),
-        ],
-        fill=garment_color,
-        outline=outline,
+    texture = Image.new("L", CANVAS_SIZE, 0)
+    texture_draw = ImageDraw.Draw(texture)
+    texture_draw.ellipse(
+        (
+            left + width * 0.22,
+            top + height * 0.05,
+            right - width * 0.22,
+            bottom - height * 0.15,
+        ),
+        fill=54,
     )
+    texture = texture.filter(ImageFilter.GaussianBlur(radius=46))
+    light = Image.new("RGBA", CANVAS_SIZE, (255, 236, 255, 0))
+    light.putalpha(ImageChops.multiply(texture, mask).point(lambda value: int(value * 0.50)))
 
-    draw.text((center_x - 155, 455), "ROUPA MOCK", fill="#ffffff")
+    edge = ImageChops.subtract(mask, mask.filter(ImageFilter.MinFilter(13)))
+    outline = Image.new("RGBA", CANVAS_SIZE, (245, 208, 254, 0))
+    outline.putalpha(edge.point(lambda value: int(value * 0.50)))
 
-    if not has_garment:
-        draw.text((center_x - 205, 500), "sem imagem processada", fill="#fef3c7")
+    layer = Image.alpha_composite(base, light)
+    layer = Image.alpha_composite(layer, outline)
+    draw = ImageDraw.Draw(layer)
+    draw.text((center_x - 78, top + int(height * 0.42)), "MOCK", fill="#ffffff")
+    return layer
+
+
+def _apply_fit_heatmap_overlay(
+    image: Image.Image,
+    body_alpha: Image.Image,
+    zones: List[FitZone],
+) -> Image.Image:
+    if not zones:
+        return image
+
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    width, height = image.size
+    center_x = width // 2
+
+    region_boxes = {
+        "shoulder": (center_x - 200, 285, center_x + 200, 390),
+        "chest": (center_x - 170, 345, center_x + 170, 535),
+        "waist": (center_x - 135, 520, center_x + 135, 670),
+        "hip": (center_x - 180, 650, center_x + 180, 815),
+        "biceps": (center_x - 280, 360, center_x + 280, 570),
+        "sleeve": (center_x - 290, 380, center_x + 290, 760),
+        "thigh": (center_x - 130, 770, center_x + 130, 980),
+        "inseam": (center_x - 100, 820, center_x + 100, 1120),
+    }
+
+    for zone in zones:
+        if zone.color == "gray":
+            alpha_value = 54
+        else:
+            alpha_value = 88
+
+        box = region_boxes.get(zone.zone)
+        if not box:
+            continue
+
+        mask = Image.new("L", image.size, 0)
+        draw = ImageDraw.Draw(mask)
+        draw.rounded_rectangle(box, radius=42, fill=alpha_value)
+        mask = ImageChops.multiply(mask.filter(ImageFilter.GaussianBlur(radius=18)), body_alpha)
+
+        color = _heat_rgba(zone.color)
+        layer = Image.new("RGBA", image.size, (*color, 0))
+        layer.putalpha(mask)
+        overlay = Image.alpha_composite(overlay, layer)
+
+    return Image.alpha_composite(image, overlay)
+
+
+def _heat_rgba(color: str) -> tuple[int, int, int]:
+    if color == "red":
+        return (239, 68, 68)
+    if color == "yellow":
+        return (245, 158, 11)
+    if color == "green":
+        return (34, 197, 94)
+    if color == "blue":
+        return (56, 189, 248)
+    return (156, 163, 175)
 
 
 def _draw_fit_labels(draw: ImageDraw.ImageDraw, zones: List[FitZone]) -> None:
@@ -367,12 +719,22 @@ def _draw_fit_labels(draw: ImageDraw.ImageDraw, zones: List[FitZone]) -> None:
         "chest": 370,
         "waist": 600,
         "hip": 760,
+        "biceps": 480,
+        "sleeve": 540,
+        "thigh": 850,
+        "inseam": 920,
+        "shoulder": 310,
     }
 
     label_map = {
-        "chest": "Tórax",
+        "chest": "Torax",
         "waist": "Cintura",
         "hip": "Quadril",
+        "biceps": "Biceps",
+        "sleeve": "Manga",
+        "thigh": "Coxa",
+        "inseam": "Entrepernas",
+        "shoulder": "Ombros",
     }
 
     for zone in zones:
@@ -387,16 +749,8 @@ def _draw_fit_labels(draw: ImageDraw.ImageDraw, zones: List[FitZone]) -> None:
         )
 
 
-def _skin_color(tone: str) -> str:
-    if tone == "light":
-        return "#f2c7a5"
-    if tone == "medium":
-        return "#c6865a"
-    if tone == "dark":
-        return "#6b3f2a"
-    if tone == "deep":
-        return "#3a241c"
-    return "#c6865a"
+def _bounded_scale(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, float(value or 1.0)))
 
 
 def _heat_color(color: str) -> str:
@@ -406,6 +760,8 @@ def _heat_color(color: str) -> str:
         return "#fde68a"
     if color == "green":
         return "#86efac"
+    if color == "blue":
+        return "#7dd3fc"
     if color == "gray":
         return "#d1d5db"
     return "#c4b5fd"

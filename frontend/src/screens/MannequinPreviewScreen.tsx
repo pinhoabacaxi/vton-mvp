@@ -24,6 +24,10 @@ export function MannequinPreviewScreen({ mannequin }: Props) {
         <Text style={{ color: "#d8c7ff" }}>
           Tórax: {mannequin.chest_cm} cm • Cintura: {mannequin.waist_cm} cm • Quadril: {mannequin.hip_cm} cm
         </Text>
+
+        <Text style={{ color: "#bca7df", fontSize: 13 }}>
+          Ombros: {mannequin.shoulder_cm ?? "-"} cm • Bíceps: {mannequin.biceps_cm ?? "-"} cm • Coxa: {mannequin.thigh_cm ?? "-"} cm • Entrepernas: {mannequin.inseam_cm ?? "-"} cm
+        </Text>
       </View>
     </SafeAreaView>
   );

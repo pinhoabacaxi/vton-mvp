@@ -11,7 +11,7 @@ import { recommendBodyModels, generateMannequin } from "./src/api/client";
 import { InitialBodyInput, BodyRecommendationResponse, BodyModel, FineTuneInput, MannequinParams } from "./src/types/body";
 import { createSavedLook, SavedLook, SaveLookInput } from "./src/types/look";
 import { createClosetItem } from "./src/types/closet";
-import { FitCheckResult } from "./src/types/product";
+import { FitCheckResult, ProductScrapeResult } from "./src/types/product";
 import { MannequinRenderResult } from "./src/types/mannequin";
 import { VtonPayload, VtonRunResult } from "./src/types/vton";
 import { buildAffiliateUrl } from "./src/utils/affiliate";
@@ -97,6 +97,7 @@ export default function App() {
   const vtonResult = useVtonStore((state) => state.vtonResult);
   const productUrl = useVtonStore((state) => state.productUrl);
   const productSource = useVtonStore((state) => state.productSource);
+  const productDetails = useVtonStore((state) => state.productDetails);
 
   const setInitialInput = useVtonStore((state) => state.setInitialInput);
   const setRecommendation = useVtonStore((state) => state.setRecommendation);
@@ -109,6 +110,7 @@ export default function App() {
   const setVtonResult = useVtonStore((state) => state.setVtonResult);
   const setProductUrl = useVtonStore((state) => state.setProductUrl);
   const setProductSource = useVtonStore((state) => state.setProductSource);
+  const setProductDetails = useVtonStore((state) => state.setProductDetails);
 
   useEffect(() => {
     let mounted = true;
@@ -289,7 +291,7 @@ export default function App() {
                         onPress={() => props.navigation.navigate("Closet")}
                         style={{ flex: 1, backgroundColor: "#4c1d95", padding: 12, borderRadius: 10, alignItems: "center" }}
                       >
-                        <Text style={{ color: "white", fontWeight: "800" }}>Meu Armario</Text>
+                        <Text style={{ color: "white", fontWeight: "800" }}>Meu Armário</Text>
                       </TouchableOpacity>
                     </View>
 
@@ -359,6 +361,7 @@ export default function App() {
                   initialUrl={productUrl}
                   onProductCaptured={(data) => {
                     const affiliateUrl = buildAffiliateUrl({ sourceUrl: data.product_url, sourceName: data.source_name, campaign: "virtual_try_on" });
+                    setProductDetails(data.product ?? null);
                     setProductSource({
                       product_url: data.product_url,
                       affiliate_url: affiliateUrl,
@@ -401,6 +404,7 @@ export default function App() {
               mannequin ? (
                 <FitCheckScreen
                   mannequin={mannequin}
+                  product={productDetails}
                   onContinue={() => props.navigation.navigate("VtonPreview")}
                   onFitComplete={(result) => setFitCheckResult(result)}
                 />

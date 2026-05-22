@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { InitialBodyInput, BodyRecommendationResponse, BodyModel, FineTuneInput, MannequinParams } from "../types/body";
-import { GarmentUploadResult, FitCheckResult } from "../types/product";
+import { GarmentUploadResult, FitCheckResult, ProductScrapeResult } from "../types/product";
 import { MannequinRenderResult } from "../types/mannequin";
 import { VtonPayload, VtonRunResult } from "../types/vton";
 import { LookSource } from "../types/look";
@@ -12,6 +12,7 @@ export type VtonState = {
   mannequin: MannequinParams | null;
   productUrl: string | null;
   productSource: LookSource | null;
+  productDetails: ProductScrapeResult | null;
   garment: GarmentUploadResult | null;
   fitCheckResult: FitCheckResult | null;
   frontRender: MannequinRenderResult | null;
@@ -23,6 +24,7 @@ export type VtonState = {
   setMannequin: (value: MannequinParams | null) => void;
   setProductUrl: (value: string | null) => void;
   setProductSource: (value: LookSource | null) => void;
+  setProductDetails: (value: ProductScrapeResult | null) => void;
   setGarment: (value: GarmentUploadResult | null) => void;
   setFitCheckResult: (value: FitCheckResult | null) => void;
   setFrontRender: (value: MannequinRenderResult | null) => void;
@@ -38,6 +40,7 @@ export const useVtonStore = create<VtonState>()((set) => ({
   mannequin: null,
   productUrl: null,
   productSource: null,
+  productDetails: null,
   garment: null,
   fitCheckResult: null,
   frontRender: null,
@@ -49,6 +52,7 @@ export const useVtonStore = create<VtonState>()((set) => ({
   setMannequin: (value) => set({ mannequin: value }),
   setProductUrl: (value) => set({ productUrl: value }),
   setProductSource: (value) => set({ productSource: value }),
+  setProductDetails: (value) => set({ productDetails: value }),
   setGarment: (value) => set({ garment: value }),
   setFitCheckResult: (value) => set({ fitCheckResult: value }),
   setFrontRender: (value) => set({ frontRender: value }),
@@ -62,6 +66,7 @@ export const useVtonStore = create<VtonState>()((set) => ({
       mannequin: null,
       productUrl: null,
       productSource: null,
+      productDetails: null,
       garment: null,
       fitCheckResult: null,
       frontRender: null,

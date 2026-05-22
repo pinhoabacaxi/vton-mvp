@@ -1,4 +1,5 @@
-from app.models.body import InitialBodyInput, BodyModel, FineTuneInput, MannequinParams
+from app.models.body import BodyModel, FineTuneInput, InitialBodyInput, MannequinParams
+from app.services.anthropometric_estimator import estimate_missing_measurements
 
 
 BASE_MODELS = [
@@ -72,7 +73,6 @@ def calculate_bmi(height_cm: float, weight_kg: float) -> float:
 
 def recommend_body_models(user_input: InitialBodyInput):
     bmi = calculate_bmi(user_input.height_cm, user_input.weight_kg)
-
     models = []
 
     for model in BASE_MODELS:
@@ -85,16 +85,9 @@ def recommend_body_models(user_input: InitialBodyInput):
         elif bmi >= 27 and model.id in ["full_soft", "balanced_soft", "wide_hip"]:
             recommended = True
 
-        models.append(
-            model.model_copy(
-                update={
-                    "recommended": recommended
-                }
-            )
-        )
+        models.append(model.model_copy(update={"recommended": recommended}))
 
     models = sorted(models, key=lambda item: item.recommended, reverse=True)
-
     return bmi, models
 
 
@@ -104,11 +97,17 @@ def build_mannequin_params(data: FineTuneInput) -> MannequinParams:
         BASE_MODELS[0],
     )
 
+    inferred, estimated_flags = estimate_missing_measurements(data)
+
     chest_scale = data.chest_cm / 95
     waist_scale = data.waist_cm / 80
     hip_scale = data.hip_cm / 98
-
     height_scale = data.height_cm / 170
+    shoulder_scale = inferred["shoulder_cm"] / 42
+    biceps_scale = inferred["biceps_cm"] / 32
+    thigh_scale = inferred["thigh_cm"] / 58
+    inseam_scale = inferred["inseam_cm"] / 78
+    sleeve_scale = inferred["sleeve_cm"] / 60
 
     return MannequinParams(
         height_cm=data.height_cm,
@@ -117,12 +116,24 @@ def build_mannequin_params(data: FineTuneInput) -> MannequinParams:
         chest_cm=data.chest_cm,
         waist_cm=data.waist_cm,
         hip_cm=data.hip_cm,
+        shoulder_cm=inferred["shoulder_cm"],
+        sleeve_cm=inferred["sleeve_cm"],
+        biceps_cm=inferred["biceps_cm"],
+        top_length_cm=inferred["top_length_cm"],
+        inseam_cm=inferred["inseam_cm"],
+        thigh_cm=inferred["thigh_cm"],
+        rise_cm=inferred["rise_cm"],
+        wrist_cm=inferred["wrist_cm"],
+        additional_measurements=data.additional_measurements,
+        estimated_measurements=estimated_flags,
         skin_tone=data.skin_tone,
-        shoulder_scale=round(base.shoulder_ratio * chest_scale, 3),
+        shoulder_scale=round(base.shoulder_ratio * shoulder_scale, 3),
         chest_scale=round(chest_scale, 3),
         waist_scale=round(base.waist_ratio * waist_scale, 3),
         hip_scale=round(base.hip_ratio * hip_scale, 3),
-        leg_scale=round(height_scale, 3),
-        arm_scale=round(height_scale * base.shoulder_ratio, 3),
+        leg_scale=round((height_scale * 0.45) + (inseam_scale * 0.55), 3),
+        arm_scale=round((sleeve_scale * 0.65) + (base.shoulder_ratio * 0.35), 3),
+        biceps_scale=round(biceps_scale, 3),
+        thigh_scale=round(thigh_scale, 3),
         base_model_id=data.base_model_id,
     )

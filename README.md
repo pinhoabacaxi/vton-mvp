@@ -39,8 +39,8 @@ Principais variaveis:
 
 - `PUBLIC_BACKEND_URL`: URL publica do backend, usada para montar URLs absolutas de `/uploads`.
 - `DISABLE_REMBG`: use `true` no Render Free para reduzir memoria.
-- `VTON_PROVIDER`: `mock`, `external` ou `replicate`.
-- `REPLICATE_API_TOKEN`, `REPLICATE_MODEL`, `REPLICATE_VERSION`: usadas apenas quando o provider Replicate estiver ativo.
+- `VTON_PROVIDER`: `auto`, `mock`, `external` ou `replicate`. Em `auto`, usa Replicate se `REPLICATE_API_TOKEN` e modelo/versao existirem; caso contrario, cai para mock.
+- `REPLICATE_API_TOKEN`, `REPLICATE_MODEL`, `REPLICATE_VERSION`: usadas quando o provider Replicate estiver ativo. Para o Render atual, use `REPLICATE_MODEL=cuuupid/idm-vton`.
 
 ## Mobile local
 
@@ -60,7 +60,9 @@ Depois de criar o servico no Render, configure:
 
 - `PUBLIC_BACKEND_URL=https://vton-mvp-api.onrender.com`
 - `DISABLE_REMBG=true` para plano Free
-- Chaves do provider VTON somente se usar Replicate/API externa
+- `VTON_PROVIDER=auto`
+- `REPLICATE_MODEL=cuuupid/idm-vton`
+- `REPLICATE_API_TOKEN` configurado como secret no painel do Render
 
 ## Higiene para GitHub
 

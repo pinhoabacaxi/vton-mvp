@@ -14,11 +14,13 @@ from app.models.body import (
     MannequinParams,
 )
 from app.models.product import (
-    ProductUrlInput,
-    ProductScrapeResult,
-    GarmentUploadResult,
     FitCheckInput,
     FitCheckResult,
+    FitFeedbackInput,
+    FitFeedbackResult,
+    GarmentUploadResult,
+    ProductScrapeResult,
+    ProductUrlInput,
 )
 from app.models.vton import (
     VtonPrepareInput,
@@ -130,6 +132,39 @@ def recommend_body(input_data: InitialBodyInput):
         bmi=bmi,
         models=models,
     )
+
+
+@app.get("/body/model-previews")
+def get_body_model_previews():
+    try:
+        from app.services.body_recommender import BASE_MODELS
+        from app.services.mannequin_renderer import render_body_model_preview
+
+        return {
+            "previews": [
+                {
+                    "base_model_id": body_model.id,
+                    "label": body_model.label,
+                    "preview_url": render_body_model_preview(body_model.id),
+                }
+                for body_model in BASE_MODELS
+            ]
+        }
+
+    except ImportError as error:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Recurso indisponível: dependência ausente para previews "
+                f"dos biotipos ({error})."
+            ),
+        ) from error
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Erro ao gerar previews dos biotipos: {error}",
+        ) from error
 
 
 @app.post("/body/mannequin", response_model=MannequinParams)
@@ -257,6 +292,23 @@ def check_fit(input_data: FitCheckInput):
             status_code=501,
             detail=(
                 "Recurso indisponível: dependência ausente para análise de "
+                f"caimento ({error})."
+            ),
+        ) from error
+
+
+@app.post("/fit/feedback", response_model=FitFeedbackResult)
+def fit_feedback(input_data: FitFeedbackInput):
+    try:
+        from app.services.fit_feedback import record_fit_feedback
+
+        return record_fit_feedback(input_data)
+
+    except ImportError as error:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Recurso indisponÃƒÂ­vel: dependÃƒÂªncia ausente para feedback de "
                 f"caimento ({error})."
             ),
         ) from error

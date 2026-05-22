@@ -22,7 +22,20 @@ class ExternalVtonProviderError(Exception):
 
 
 def get_vton_provider_name() -> str:
-    return os.getenv("VTON_PROVIDER", "generic").strip().lower() or "generic"
+    configured_provider = os.getenv("VTON_PROVIDER", "mock").strip().lower() or "mock"
+
+    if configured_provider == "auto":
+        if is_replicate_configured():
+            return "replicate"
+
+        api_url = os.getenv("VTON_API_URL", "").strip()
+        api_key = os.getenv("VTON_API_KEY", "").strip()
+        if api_url and api_key:
+            return "generic"
+
+        return "mock"
+
+    return configured_provider
 
 
 def is_external_vton_configured() -> bool:
@@ -30,6 +43,9 @@ def is_external_vton_configured() -> bool:
 
     if provider == "replicate":
         return is_replicate_configured()
+
+    if provider == "mock":
+        return False
 
     api_url = os.getenv("VTON_API_URL", "").strip()
     api_key = os.getenv("VTON_API_KEY", "").strip()

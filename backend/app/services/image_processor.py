@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageOps
 
 from app.services.url_utils import absolute_url
 
@@ -68,9 +68,24 @@ def _open_optimized_rgba(original: Path) -> Image.Image:
 def _save_lightweight_fallback(image: Image.Image, original: Path, reason: str) -> tuple[str, str]:
     fallback_filename = f"{original.stem}_optimized.png"
     fallback_path = PROCESSED_DIR / fallback_filename
-    image.save(fallback_path, "PNG", optimize=True)
+    normalized = normalize_garment_visual(image)
+    normalized.save(fallback_path, "PNG", optimize=True)
     LOGGER.info("Using lightweight image fallback for %s: %s", original.name, reason)
     return fallback_filename, str(fallback_path)
+
+
+def normalize_garment_visual(image: Image.Image) -> Image.Image:
+    rgba = image.convert("RGBA")
+    alpha = rgba.getchannel("A")
+
+    rgb = Image.new("RGB", rgba.size, (22, 18, 30))
+    rgb.paste(rgba.convert("RGB"), mask=alpha)
+    rgb = ImageEnhance.Contrast(rgb).enhance(1.08)
+    rgb = ImageEnhance.Color(rgb).enhance(1.06)
+    rgb = ImageEnhance.Sharpness(rgb).enhance(1.04)
+    rgb = ImageEnhance.Brightness(rgb).enhance(1.01)
+
+    return Image.merge("RGBA", (*rgb.split(), alpha))
 
 
 def remove_background(original_path: str) -> tuple[str, str]:
@@ -97,6 +112,7 @@ def remove_background(original_path: str) -> tuple[str, str]:
 
         try:
             processed = remove(image)
+            processed = normalize_garment_visual(processed)
             processed.save(output_path, "PNG", optimize=True)
         except Exception as error:
             LOGGER.exception(
