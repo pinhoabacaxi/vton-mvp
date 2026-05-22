@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -36,7 +37,11 @@ from app.services.huggingface_vton_provider import (
     run_huggingface_vton,
 )
 from app.services.image_processor import UPLOAD_DIR, normalize_garment_visual
-from app.services.mannequin_renderer import CANVAS_SIZE, render_mannequin_scene
+from app.services.mannequin_renderer import (
+    CANVAS_SIZE,
+    render_mannequin_scene,
+    render_tryon_person_scene,
+)
 from app.services.url_utils import absolute_url
 from app.services.vton_render_pipeline import (
     GarmentRenderContext,
@@ -154,8 +159,9 @@ def create_mock_vton_result(data: VtonMockInput) -> VtonMockResult:
         payload=data.payload,
     )
 
-    draw = ImageDraw.Draw(image)
-    _draw_fit_labels(draw, data.payload.fit_zones)
+    if _should_draw_fit_labels():
+        draw = ImageDraw.Draw(image)
+        _draw_fit_labels(draw, data.payload.fit_zones)
 
     image.save(output_path, "PNG", optimize=True)
 
@@ -332,7 +338,7 @@ async def _run_external_only(data: VtonRunInput, provider: str) -> VtonRunResult
 
 
 async def _run_huggingface_only(data: VtonRunInput) -> VtonRunResult:
-    public_payload = _ensure_public_vton_assets(data.payload)
+    public_payload = _ensure_public_vton_assets(data.payload, refresh_person_image=True)
     raw_response = await run_huggingface_vton(public_payload)
     result_url = extract_huggingface_result_url(raw_response)
 
@@ -363,7 +369,10 @@ def _fallback_error(provider: str, error: Exception) -> Dict[str, str]:
     }
 
 
-def _ensure_public_vton_assets(payload: VtonPayload) -> VtonPayload:
+def _ensure_public_vton_assets(
+    payload: VtonPayload,
+    refresh_person_image: bool = False,
+) -> VtonPayload:
     garment_processed_url = (
         absolute_url(payload.garment_processed_url)
         if payload.garment_processed_url
@@ -383,7 +392,7 @@ def _ensure_public_vton_assets(payload: VtonPayload) -> VtonPayload:
     if not garment_processed_url and garment_original_url:
         garment_processed_url = garment_original_url
 
-    if not person_image_url:
+    if refresh_person_image or not person_image_url:
         person_image_url = _create_public_person_image(payload)
 
     api_ready_payload = dict(payload.api_ready_payload)
@@ -408,11 +417,7 @@ def _create_public_person_image(payload: VtonPayload) -> str:
     filename = f"replicate_person_{uuid4().hex}.png"
     output_path = PERSON_RENDER_DIR / filename
 
-    image, _, _, _ = render_mannequin_scene(
-        payload.mannequin,
-        size=CANVAS_SIZE,
-        include_label=False,
-    )
+    image = render_tryon_person_scene(payload.mannequin, size=CANVAS_SIZE)
     image.save(output_path, "PNG", optimize=True)
 
     return absolute_url(f"/uploads/mannequin/{filename}")
@@ -448,7 +453,7 @@ def _composite_garment_on_body(
         )
         return Image.alpha_composite(image, fallback)
 
-    garment = normalize_garment_visual(_crop_to_alpha(garment))
+    garment = normalize_garment_visual(_crop_to_visual_content(garment))
     if _alpha_is_mostly_opaque(garment):
         garment = _apply_soft_garment_silhouette(garment)
 
@@ -544,6 +549,51 @@ def _crop_to_alpha(image: Image.Image) -> Image.Image:
     return rgba.crop((left, top, right, bottom))
 
 
+def _crop_to_visual_content(image: Image.Image) -> Image.Image:
+    rgba = image.convert("RGBA")
+    alpha_bbox = rgba.getchannel("A").getbbox()
+    if alpha_bbox and alpha_bbox != (0, 0, rgba.width, rgba.height):
+        return _crop_to_alpha(rgba)
+
+    rgb = rgba.convert("RGB")
+    sample_points = [
+        (0, 0),
+        (rgba.width - 1, 0),
+        (0, rgba.height - 1),
+        (rgba.width - 1, rgba.height - 1),
+    ]
+    colors = [rgb.getpixel(point) for point in sample_points]
+    background = tuple(int(sum(channel) / len(colors)) for channel in zip(*colors))
+    background_layer = Image.new("RGB", rgba.size, background)
+    diff = ImageChops.difference(rgb, background_layer).convert("L")
+
+    content_mask = diff.point(lambda value: 255 if value > 24 else 0)
+    content_mask = content_mask.filter(ImageFilter.MaxFilter(7))
+    content_mask = content_mask.filter(ImageFilter.GaussianBlur(radius=0.8))
+    bbox = content_mask.getbbox()
+
+    if not bbox:
+        return rgba
+
+    margin_x = int(rgba.width * 0.035)
+    margin_y = int(rgba.height * 0.035)
+    left = max(0, bbox[0] - margin_x)
+    top = max(0, bbox[1] - margin_y)
+    right = min(rgba.width, bbox[2] + margin_x)
+    bottom = min(rgba.height, bbox[3] + margin_y)
+
+    cropped = rgba.crop((left, top, right, bottom))
+    cropped_mask = content_mask.crop((left, top, right, bottom))
+    soft_alpha = cropped_mask.point(lambda value: 255 if value > 44 else 0)
+    soft_alpha = soft_alpha.filter(ImageFilter.GaussianBlur(radius=max(0.6, cropped.width // 260)))
+
+    original_alpha = cropped.getchannel("A")
+    if original_alpha.getextrema()[0] >= 245:
+        return Image.merge("RGBA", (*cropped.convert("RGB").split(), soft_alpha))
+
+    return Image.merge("RGBA", (*cropped.convert("RGB").split(), ImageChops.multiply(original_alpha, soft_alpha)))
+
+
 def _alpha_is_mostly_opaque(image: Image.Image) -> bool:
     alpha = image.getchannel("A")
     extrema = alpha.getextrema()
@@ -592,14 +642,23 @@ def _fit_garment_to_body(
     garment: Image.Image,
     payload: VtonPayload,
 ) -> tuple[Image.Image, int, int]:
-    target_left, target_top, target_right, target_bottom = _garment_target_box(payload)
+    target_left, target_top, target_right, target_bottom = _garment_target_box(payload, garment)
     target_width = target_right - target_left
     target_height = target_bottom - target_top
 
-    scale = min(
-        target_width / max(1, garment.width),
-        target_height / max(1, garment.height),
-    )
+    garment_kind = _garment_kind(garment)
+    if garment_kind == "long":
+        scale = min(
+            target_width / max(1, garment.width),
+            target_height / max(1, garment.height),
+        )
+        if garment.height > garment.width:
+            scale = max(scale, target_height / max(1, garment.height) * 0.94)
+    else:
+        scale = min(
+            target_width / max(1, garment.width),
+            target_height / max(1, garment.height),
+        )
     scale = max(0.1, scale)
     new_size = (
         max(1, int(garment.width * scale)),
@@ -608,25 +667,37 @@ def _fit_garment_to_body(
 
     resized = garment.resize(new_size, Image.Resampling.LANCZOS)
     left = target_left + (target_width - resized.width) // 2
-    top = target_top + int((target_height - resized.height) * 0.18)
+    top_bias = 0.04 if garment_kind == "long" else 0.16
+    top = target_top + int((target_height - resized.height) * top_bias)
     return resized, left, top
 
 
-def _garment_target_box(payload: VtonPayload) -> tuple[int, int, int, int]:
+def _garment_target_box(
+    payload: VtonPayload,
+    garment: Optional[Image.Image] = None,
+) -> tuple[int, int, int, int]:
     mannequin = payload.mannequin
     center_x = CANVAS_SIZE[0] // 2
+    garment_kind = _garment_kind(garment)
 
     shoulder_half = int(172 * _bounded_scale(getattr(mannequin, "shoulder_scale", 1.0), 0.74, 1.32))
     chest_half = int(164 * _bounded_scale(getattr(mannequin, "chest_scale", 1.0), 0.74, 1.36))
     waist_half = int(122 * _bounded_scale(getattr(mannequin, "waist_scale", 1.0), 0.72, 1.42))
+    hip_half = int(150 * _bounded_scale(getattr(mannequin, "hip_scale", 1.0), 0.74, 1.38))
 
     width_multiplier, bottom_offset = _fit_target_adjustments(payload.fit_zones)
 
-    target_width = int(max(300, shoulder_half * 1.92, chest_half * 2.06, waist_half * 2.20))
+    if garment_kind == "long":
+        target_width = int(max(330, shoulder_half * 1.78, chest_half * 2.04, hip_half * 1.90))
+        target_top = 295
+        target_bottom = min(1040, 965 + bottom_offset)
+    else:
+        target_width = int(max(330, shoulder_half * 1.88, chest_half * 2.12, waist_half * 2.30))
+        target_top = 310
+        target_bottom = min(840, 770 + bottom_offset)
+
     target_width = int(target_width * width_multiplier)
-    target_width = min(500, target_width)
-    target_top = 310
-    target_bottom = min(820, 760 + bottom_offset)
+    target_width = min(560 if garment_kind == "long" else 520, target_width)
 
     return (
         center_x - target_width // 2,
@@ -634,6 +705,16 @@ def _garment_target_box(payload: VtonPayload) -> tuple[int, int, int, int]:
         center_x + target_width // 2,
         target_bottom,
     )
+
+
+def _garment_kind(garment: Optional[Image.Image]) -> str:
+    if garment is None:
+        return "top"
+
+    aspect = garment.height / max(1, garment.width)
+    if aspect >= 1.18:
+        return "long"
+    return "top"
 
 
 def _fit_target_adjustments(zones: List[FitZone]) -> tuple[float, int]:
@@ -685,6 +766,10 @@ def _build_foreground_occlusion_mask(mannequin, size: tuple[int, int]) -> Image.
         )
 
     return mask.filter(ImageFilter.GaussianBlur(radius=7))
+
+
+def _should_draw_fit_labels() -> bool:
+    return os.getenv("VTON_DRAW_FIT_LABELS", "").strip().lower() in {"1", "true", "yes", "sim"}
 
 
 def _build_parametric_garment_placeholder(payload: VtonPayload) -> Image.Image:
@@ -795,9 +880,9 @@ def _apply_fit_heatmap_overlay(
 
     for zone in zones:
         if zone.color == "gray":
-            alpha_value = 54
+            alpha_value = 26
         else:
-            alpha_value = 88
+            alpha_value = 44
 
         box = region_boxes.get(zone.zone)
         if not box:

@@ -36,6 +36,23 @@ def render_front_mannequin(data: MannequinRenderInput) -> MannequinRenderResult:
     )
 
 
+def render_tryon_person_scene(
+    mannequin,
+    size: tuple[int, int] = CANVAS_SIZE,
+) -> Image.Image:
+    """Render a bright, human-like try-on person for external VTON providers."""
+
+    high_size = (size[0] * SUPERSAMPLE_SCALE, size[1] * SUPERSAMPLE_SCALE)
+    scene = _create_studio_background(high_size)
+    body_layer, body_alpha, body_shadow, body_light = build_parametric_body_layers(
+        mannequin,
+        high_size,
+    )
+    scene.alpha_composite(body_layer)
+    _draw_tryon_base_clothing(scene, body_alpha, body_shadow, body_light, high_size)
+    return _downsample_rgba(scene, size)
+
+
 def render_body_model_preview(base_model_id: str) -> str:
     from app.models.body import FineTuneInput
     from app.services.body_recommender import build_mannequin_params
@@ -157,6 +174,32 @@ def _create_background(size: tuple[int, int]) -> Image.Image:
             int(height * 1.05),
         ),
         fill="#2d1461",
+    )
+    return image
+
+
+def _create_studio_background(size: tuple[int, int]) -> Image.Image:
+    width, height = size
+    image = Image.new("RGBA", size, "#f6f0ea")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, width, height), fill="#f6f0ea")
+    draw.ellipse(
+        (
+            int(width * 0.12),
+            int(height * 0.04),
+            int(width * 0.88),
+            int(height * 0.98),
+        ),
+        fill="#fffaf5",
+    )
+    draw.ellipse(
+        (
+            int(width * 0.28),
+            int(height * 0.86),
+            int(width * 0.72),
+            int(height * 0.94),
+        ),
+        fill="#d8cabf",
     )
     return image
 
@@ -323,23 +366,36 @@ def _draw_tapered_limb(
     if len(points) < 2:
         return
 
-    for index in range(len(points) - 1):
+    left_edge: list[tuple[float, float]] = []
+    right_edge: list[tuple[float, float]] = []
+
+    for index, point in enumerate(points):
+        t = index / max(1, len(points) - 1)
+        width = _lerp(start_width, end_width, _smooth_step(t))
+        if index < len(points) - 1:
+            next_point = points[index + 1]
+        else:
+            next_point = points[index - 1]
+        dx = next_point[0] - point[0]
+        dy = next_point[1] - point[1]
+        length = max(0.001, (dx * dx + dy * dy) ** 0.5)
+        nx = -dy / length
+        ny = dx / length
+        half = width * 0.5
+        left_edge.append((point[0] + nx * half, point[1] + ny * half))
+        right_edge.append((point[0] - nx * half, point[1] - ny * half))
+
+    draw.polygon(
+        [(int(x), int(y)) for x, y in left_edge + list(reversed(right_edge))],
+        fill=255,
+    )
+
+    for index in range(len(points)):
         t = index / max(1, len(points) - 2)
         width = _lerp(start_width, end_width, _smooth_step(t))
-        draw.line(
-            (
-                int(points[index][0]),
-                int(points[index][1]),
-                int(points[index + 1][0]),
-                int(points[index + 1][1]),
-            ),
-            fill=255,
-            width=max(8, int(width)),
-        )
-        if index > 0:
-            radius = max(4, int(width / 2))
-            x, y = points[index]
-            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=255)
+        radius = max(4, int(width / 2))
+        x, y = points[index]
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=255)
 
     radius = max(4, int(end_width / 2))
     x, y = points[-1]
@@ -402,6 +458,69 @@ def _draw_torso_volume(body_alpha: Image.Image, size: tuple[int, int]) -> Image.
     return ImageChops.multiply(light, body_alpha)
 
 
+def _draw_tryon_base_clothing(
+    scene: Image.Image,
+    body_alpha: Image.Image,
+    body_shadow: Image.Image,
+    body_light: Image.Image,
+    size: tuple[int, int],
+) -> None:
+    width, height = size
+    center_x = width // 2
+    clothing_mask = Image.new("L", size, 0)
+    draw = ImageDraw.Draw(clothing_mask)
+
+    top_points = [
+        (center_x - width * 0.108, height * 0.324),
+        (center_x + width * 0.108, height * 0.324),
+        (center_x + width * 0.153, height * 0.530),
+        (center_x + width * 0.100, height * 0.626),
+        (center_x - width * 0.100, height * 0.626),
+        (center_x - width * 0.153, height * 0.530),
+    ]
+    draw.polygon([(int(x), int(y)) for x, y in top_points], fill=235)
+    draw.ellipse(
+        (
+            center_x - width * 0.055,
+            height * 0.286,
+            center_x + width * 0.055,
+            height * 0.390,
+        ),
+        fill=0,
+    )
+
+    shorts_box = (
+        center_x - width * 0.130,
+        height * 0.640,
+        center_x + width * 0.130,
+        height * 0.745,
+    )
+    draw.rounded_rectangle(shorts_box, radius=int(width * 0.034), fill=225)
+    draw.rounded_rectangle(
+        (
+            center_x - width * 0.025,
+            height * 0.670,
+            center_x + width * 0.025,
+            height * 0.770,
+        ),
+        radius=int(width * 0.020),
+        fill=0,
+    )
+
+    clothing_mask = ImageChops.multiply(clothing_mask.filter(ImageFilter.GaussianBlur(radius=1.2)), body_alpha)
+    fabric = Image.new("RGBA", size, (238, 232, 226, 0))
+    fabric.putalpha(clothing_mask)
+
+    shadow = Image.new("RGBA", size, (94, 78, 92, 0))
+    shadow.putalpha(ImageChops.multiply(body_shadow, clothing_mask).point(lambda value: int(value * 0.34)))
+    light = Image.new("RGBA", size, (255, 255, 255, 0))
+    light.putalpha(ImageChops.multiply(body_light, clothing_mask).point(lambda value: int(value * 0.20)))
+
+    scene.alpha_composite(fabric)
+    scene.alpha_composite(shadow)
+    scene.alpha_composite(light)
+
+
 def _draw_soft_highlight(
     draw: ImageDraw.ImageDraw,
     cx: float,
@@ -458,26 +577,26 @@ def _body_metrics(mannequin, size: tuple[int, int]) -> dict[str, float]:
     biceps_scale = _bounded_scale(mannequin, "biceps_scale", 0.72, 1.55)
     thigh_scale = _bounded_scale(mannequin, "thigh_scale", 0.72, 1.55)
 
-    shoulder_y = height * 0.278
+    shoulder_y = height * 0.288
     chest_y = height * 0.425
-    waist_y = height * 0.555
-    hip_y = height * 0.662
-    pelvis_y = height * 0.718
+    waist_y = height * 0.548
+    hip_y = height * 0.654
+    pelvis_y = height * 0.712
 
-    shoulder_half = width * 0.178 * shoulder_scale
-    chest_half = width * 0.150 * chest_scale
-    waist_half = width * 0.104 * waist_scale
-    hip_half = width * 0.138 * hip_scale
-    pelvis_half = width * 0.082
+    shoulder_half = width * 0.154 * shoulder_scale
+    chest_half = width * 0.142 * chest_scale
+    waist_half = width * 0.100 * waist_scale
+    hip_half = width * 0.132 * hip_scale
+    pelvis_half = width * 0.092
 
     return {
         "width": width,
         "height": height,
         "center_x": center_x,
-        "head_cy": height * 0.150,
-        "head_w": width * 0.110,
-        "head_h": height * 0.112,
-        "neck_half": width * 0.023,
+        "head_cy": height * 0.147,
+        "head_w": width * 0.096,
+        "head_h": height * 0.108,
+        "neck_half": width * 0.025,
         "shoulder_y": shoulder_y,
         "chest_y": chest_y,
         "waist_y": waist_y,
@@ -488,22 +607,22 @@ def _body_metrics(mannequin, size: tuple[int, int]) -> dict[str, float]:
         "waist_half": waist_half,
         "hip_half": hip_half,
         "pelvis_half": pelvis_half,
-        "left_shoulder_joint": (center_x - shoulder_half * 0.94, shoulder_y + height * 0.080),
-        "right_shoulder_joint": (center_x + shoulder_half * 0.94, shoulder_y + height * 0.080),
-        "left_elbow": (center_x - shoulder_half * 1.12, height * 0.505),
-        "right_elbow": (center_x + shoulder_half * 1.12, height * 0.505),
-        "left_wrist": (center_x - shoulder_half * 1.01, height * 0.682),
-        "right_wrist": (center_x + shoulder_half * 1.01, height * 0.682),
-        "upper_arm_width": width * 0.035 * arm_scale * biceps_scale,
-        "wrist_width": width * 0.025 * arm_scale,
-        "left_thigh": (center_x - width * 0.064, pelvis_y - height * 0.004),
-        "right_thigh": (center_x + width * 0.064, pelvis_y - height * 0.004),
-        "left_knee": (center_x - width * 0.073, height * 0.818),
-        "right_knee": (center_x + width * 0.073, height * 0.818),
-        "left_ankle": (center_x - width * 0.066, height * min(0.950, 0.918 + (leg_scale - 1) * 0.045)),
-        "right_ankle": (center_x + width * 0.066, height * min(0.950, 0.918 + (leg_scale - 1) * 0.045)),
-        "thigh_width": width * 0.056 * leg_scale * thigh_scale,
-        "ankle_width": width * 0.035 * leg_scale,
+        "left_shoulder_joint": (center_x - shoulder_half * 0.98, shoulder_y + height * 0.072),
+        "right_shoulder_joint": (center_x + shoulder_half * 0.98, shoulder_y + height * 0.072),
+        "left_elbow": (center_x - shoulder_half * 1.22, height * 0.510),
+        "right_elbow": (center_x + shoulder_half * 1.22, height * 0.510),
+        "left_wrist": (center_x - shoulder_half * 1.08, height * 0.694),
+        "right_wrist": (center_x + shoulder_half * 1.08, height * 0.694),
+        "upper_arm_width": width * 0.042 * arm_scale * biceps_scale,
+        "wrist_width": width * 0.024 * arm_scale,
+        "left_thigh": (center_x - width * 0.058, pelvis_y - height * 0.006),
+        "right_thigh": (center_x + width * 0.058, pelvis_y - height * 0.006),
+        "left_knee": (center_x - width * 0.070, height * 0.820),
+        "right_knee": (center_x + width * 0.070, height * 0.820),
+        "left_ankle": (center_x - width * 0.060, height * min(0.950, 0.920 + (leg_scale - 1) * 0.045)),
+        "right_ankle": (center_x + width * 0.060, height * min(0.950, 0.920 + (leg_scale - 1) * 0.045)),
+        "thigh_width": width * 0.062 * leg_scale * thigh_scale,
+        "ankle_width": width * 0.031 * leg_scale,
     }
 
 

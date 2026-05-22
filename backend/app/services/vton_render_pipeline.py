@@ -468,12 +468,12 @@ def _draw_pressure_detail(
 def _zone_alpha(zone: FitZone) -> int:
     pressure = abs(float(zone.pressure_score or 0.0))
     if _is_unknown_zone(zone):
-        return 46
+        return 24
     if _is_tight_zone(zone):
-        return int(72 + min(36, pressure * 26))
+        return int(42 + min(24, pressure * 18))
     if _is_loose_zone(zone):
-        return int(34 + min(18, pressure * 12))
-    return 50
+        return int(24 + min(14, pressure * 10))
+    return 32
 
 
 def _fit_zone_rgb(color: str) -> tuple[int, int, int]:
