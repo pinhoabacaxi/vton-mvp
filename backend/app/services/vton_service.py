@@ -36,6 +36,7 @@ from app.services.huggingface_vton_provider import (
     is_huggingface_configured,
     run_huggingface_vton,
 )
+from app.services.humanized_person_renderer import render_humanized_tryon_person
 from app.services.image_processor import UPLOAD_DIR, normalize_garment_visual
 from app.services.mannequin_renderer import (
     CANVAS_SIZE,
@@ -51,7 +52,7 @@ from app.services.vton_render_pipeline import (
 
 VTON_DIR = UPLOAD_DIR / "vton"
 VTON_DIR.mkdir(parents=True, exist_ok=True)
-PERSON_RENDER_DIR = UPLOAD_DIR / "mannequin"
+PERSON_RENDER_DIR = UPLOAD_DIR / "person"
 PERSON_RENDER_DIR.mkdir(parents=True, exist_ok=True)
 VTON_TASK_POLL_SECONDS = 2
 _VTON_TASKS: Dict[str, VtonTaskStatusResponse] = {}
@@ -341,7 +342,7 @@ async def _run_huggingface_only(data: VtonRunInput) -> VtonRunResult:
     public_payload = _ensure_public_vton_assets(
         data.payload,
         refresh_person_image=False,
-        create_missing_person=False,
+        create_missing_person=True,
     )
     raw_response = await run_huggingface_vton(public_payload)
     result_url = extract_huggingface_result_url(raw_response)
@@ -397,7 +398,11 @@ def _ensure_public_vton_assets(
     if not garment_processed_url and garment_original_url:
         garment_processed_url = garment_original_url
 
-    if refresh_person_image or (create_missing_person and not person_image_url):
+    should_replace_mock_person = create_missing_person and _is_procedural_person_url(person_image_url)
+
+    if refresh_person_image or (
+        create_missing_person and (not person_image_url or should_replace_mock_person)
+    ):
         person_image_url = _create_public_person_image(payload)
 
     api_ready_payload = dict(payload.api_ready_payload)
@@ -419,13 +424,34 @@ def _ensure_public_vton_assets(
 
 
 def _create_public_person_image(payload: VtonPayload) -> str:
-    filename = f"replicate_person_{uuid4().hex}.png"
+    filename = f"provider_person_{uuid4().hex}.jpg"
     output_path = PERSON_RENDER_DIR / filename
 
-    image = render_tryon_person_scene(payload.mannequin, size=CANVAS_SIZE)
-    image.save(output_path, "PNG", optimize=True)
+    if os.getenv("VTON_USE_HUMANIZED_PERSON", "true").strip().lower() in {"1", "true", "yes", "sim"}:
+        image = render_humanized_tryon_person(payload.mannequin, size=CANVAS_SIZE)
+    else:
+        image = render_tryon_person_scene(payload.mannequin, size=CANVAS_SIZE)
 
-    return absolute_url(f"/uploads/mannequin/{filename}")
+    rgb = Image.new("RGB", image.size, (248, 248, 246))
+    rgba = image.convert("RGBA")
+    rgb.paste(rgba.convert("RGB"), mask=rgba.getchannel("A"))
+    rgb.save(output_path, "JPEG", quality=90, optimize=True, progressive=False)
+
+    return absolute_url(f"/uploads/person/{filename}")
+
+
+def _is_procedural_person_url(person_image_url: Optional[str]) -> bool:
+    if not person_image_url:
+        return False
+    if os.getenv("VTON_REPLACE_MOCK_PERSON_FOR_EXTERNAL", "true").strip().lower() not in {
+        "1",
+        "true",
+        "yes",
+        "sim",
+    }:
+        return False
+    normalized = person_image_url.replace("\\", "/")
+    return "/uploads/mannequin/" in normalized or normalized.startswith("uploads/mannequin/")
 
 
 def _composite_garment_on_body(

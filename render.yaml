@@ -15,6 +15,10 @@ services:
         value: "true"
       - key: PUBLIC_BACKEND_URL
         value: https://vton-mvp-api.onrender.com
+      - key: VTON_USE_HUMANIZED_PERSON
+        value: "true"
+      - key: VTON_REPLACE_MOCK_PERSON_FOR_EXTERNAL
+        value: "true"
       - key: REPLICATE_MODEL
         value: cuuupid/idm-vton
       - key: REPLICATE_API_TOKEN
@@ -43,3 +47,7 @@ services:
         value: "1024"
       - key: HF_SKIP_FOR_MOCK_PERSON
         value: "false"
+      - key: HF_REJECT_SIMPLE_PERSON
+        value: "true"
+      - key: HF_IMAGE_MAX_BYTES
+        value: "2097152"
