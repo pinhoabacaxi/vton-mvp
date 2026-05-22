@@ -198,6 +198,16 @@ def _controlled_space_error(error: Exception) -> HuggingFaceProviderError:
     lowered = raw_message.lower()
     error_name = type(error).__name__
 
+    if _is_space_unavailable_error(lowered):
+        LOGGER.error(
+            "[HuggingFace VTON] Space indisponivel, em build ou com runtime quebrado: %s",
+            raw_message,
+        )
+        return HuggingFaceProviderError(
+            "O Space Hugging Face está indisponível ou falhou ao iniciar. "
+            "A prévia estimada local será usada para manter o fluxo."
+        )
+
     if (
         "indexerror" in error_name.lower()
         or "indexerror" in lowered
@@ -220,6 +230,27 @@ def _controlled_space_error(error: Exception) -> HuggingFaceProviderError:
     return HuggingFaceProviderError(
         f"Hugging Face Space falhou: {error_name}: {raw_message}"
     )
+
+
+def _is_space_unavailable_error(lowered_message: str) -> bool:
+    unavailable_markers = (
+        "build failed",
+        "build error",
+        "build queued",
+        "currently building",
+        "space is building",
+        "space is in error state",
+        "runtime error",
+        "app startup timed out",
+        "connection errored out",
+        "connection error",
+        "read timed out",
+        "readtimeout",
+        "temporarily unavailable",
+        "service unavailable",
+        "503",
+    )
+    return any(marker in lowered_message for marker in unavailable_markers)
 
 
 def _normalize_result_reference(value: Any) -> Optional[str]:
