@@ -7,6 +7,7 @@ from app.models.product import FitZone
 
 VtonRunMode = Literal["mock", "external", "auto"]
 VtonTaskState = Literal["queued", "running", "succeeded", "failed"]
+VtonRenderMethod = Literal["NEURAL_REALISTIC", "LOCAL_FIT_DIAGRAM"]
 
 
 class VtonPrepareInput(BaseModel):
@@ -36,6 +37,7 @@ class VtonMockInput(BaseModel):
 class VtonMockResult(BaseModel):
     result_url: str
     result_path: str
+    render_method: VtonRenderMethod = "LOCAL_FIT_DIAGRAM"
     message: str
 
 
@@ -49,6 +51,7 @@ class VtonRunResult(BaseModel):
     result_path: Optional[str] = None
     provider: str
     mode_requested: VtonRunMode
+    render_method: VtonRenderMethod
     status: Optional[str] = None
     used_fallback: bool
     success: bool
