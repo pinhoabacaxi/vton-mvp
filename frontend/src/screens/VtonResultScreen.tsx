@@ -1,10 +1,9 @@
-import React, { useRef, useState } from "react";
+﻿import React, { useRef, useState } from "react";
 import {
   Alert,
   Image,
   ScrollView,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import ViewShot from "react-native-view-shot";
@@ -61,6 +60,7 @@ export function VtonResultScreen({
   const cardRef = useRef<ViewShot>(null);
   const buyUrl = getPreferredBuyUrl(source ?? null);
   const fitSummary = buildFitSummaryForUser(fitZones);
+  const sourceInfo = buildPreviewSourceInfo(result);
 
   async function handleShare() {
     if (!resultImageUrl) {
@@ -133,11 +133,19 @@ export function VtonResultScreen({
         <StepHeader
           eyebrow="Resultado"
           title="Seu look virtual"
-          subtitle="Prévia estimada para visualizar proporção, estilo e pontos de caimento. O tecido, o corte e a foto original podem mudar o resultado real."
+          subtitle="Prévia para visualizar proporção, estilo e pontos de caimento. O tecido, o corte e a foto original podem mudar o resultado real."
         />
         <JourneyStepper activeStep="look" />
 
-        <InfoPill label="Prévia estimada" tone="gold" />
+        <InfoPill label={sourceInfo.label} tone={sourceInfo.tone} />
+        <FashionCard highlighted={sourceInfo.tone === "purple"}>
+          <Text style={{ color: fashionColors.text, fontWeight: "900", fontSize: 18 }}>
+            {sourceInfo.title}
+          </Text>
+          <Text style={{ color: fashionColors.textSoft, lineHeight: 22 }}>
+            {sourceInfo.message}
+          </Text>
+        </FashionCard>
 
         {resultImageUrl ? (
           <Image
@@ -249,6 +257,41 @@ export function VtonResultScreen({
       </ScrollView>
     </AppScreen>
   );
+}
+
+function buildPreviewSourceInfo(result: VtonRunResult): {
+  label: string;
+  title: string;
+  message: string;
+  tone: "gold" | "purple" | "neutral";
+} {
+  const provider = (result.provider || "").toLowerCase();
+  const isRealProvider = provider.includes("replicate") || provider.includes("huggingface") || provider.includes("external");
+
+  if (isRealProvider && !result.used_fallback) {
+    return {
+      label: "VTON real",
+      title: "Prévia realista gerada por IA",
+      message: "A API VTON conseguiu processar a imagem da pessoa e da peça. Ainda assim, considere o resultado uma estimativa visual.",
+      tone: "purple",
+    };
+  }
+
+  if (result.used_fallback) {
+    return {
+      label: "Prévia estimada",
+      title: "Usamos o mock local para manter o fluxo",
+      message: "Tentamos a geração realista primeiro, mas ela não estava disponível para esta imagem. Abaixo está uma estimativa visual de proporção e caimento.",
+      tone: "gold",
+    };
+  }
+
+  return {
+    label: "Prévia estimada",
+    title: "Mock local de caimento",
+    message: "Esta imagem foi gerada pelo motor local do app. Ela ajuda a avaliar proporção, folga e regiões de atenção, sem prometer precisão perfeita.",
+    tone: "gold",
+  };
 }
 
 export default VtonResultScreen;

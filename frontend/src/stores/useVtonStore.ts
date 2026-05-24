@@ -1,5 +1,7 @@
-import { create } from "zustand";
-import { InitialBodyInput, BodyRecommendationResponse, BodyModel, FineTuneInput, MannequinParams } from "../types/body";
+﻿import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { InitialBodyInput, BodyRecommendationResponse, BodyModel, MannequinParams } from "../types/body";
 import { GarmentUploadResult, FitCheckResult, ProductScrapeResult } from "../types/product";
 import { MannequinRenderResult } from "../types/mannequin";
 import { VtonPayload, VtonRunResult } from "../types/vton";
@@ -18,7 +20,7 @@ export type VtonState = {
   frontRender: MannequinRenderResult | null;
   vtonPayload: VtonPayload | null;
   vtonResult: VtonRunResult | null;
-  setInitialInput: (value: InitialBodyInput) => void;
+  setInitialInput: (value: InitialBodyInput | null) => void;
   setRecommendation: (value: BodyRecommendationResponse | null) => void;
   setSelectedModel: (value: BodyModel | null) => void;
   setMannequin: (value: MannequinParams | null) => void;
@@ -33,7 +35,7 @@ export type VtonState = {
   resetFlow: () => void;
 };
 
-export const useVtonStore = create<VtonState>()((set) => ({
+const emptyFlow = {
   initialInput: null,
   recommendation: null,
   selectedModel: null,
@@ -46,31 +48,43 @@ export const useVtonStore = create<VtonState>()((set) => ({
   frontRender: null,
   vtonPayload: null,
   vtonResult: null,
-  setInitialInput: (value) => set({ initialInput: value }),
-  setRecommendation: (value) => set({ recommendation: value }),
-  setSelectedModel: (value) => set({ selectedModel: value }),
-  setMannequin: (value) => set({ mannequin: value }),
-  setProductUrl: (value) => set({ productUrl: value }),
-  setProductSource: (value) => set({ productSource: value }),
-  setProductDetails: (value) => set({ productDetails: value }),
-  setGarment: (value) => set({ garment: value }),
-  setFitCheckResult: (value) => set({ fitCheckResult: value }),
-  setFrontRender: (value) => set({ frontRender: value }),
-  setVtonPayload: (value) => set({ vtonPayload: value }),
-  setVtonResult: (value) => set({ vtonResult: value }),
-  resetFlow: () =>
-    set({
-      initialInput: null,
-      recommendation: null,
-      selectedModel: null,
-      mannequin: null,
-      productUrl: null,
-      productSource: null,
-      productDetails: null,
-      garment: null,
-      fitCheckResult: null,
-      frontRender: null,
-      vtonPayload: null,
-      vtonResult: null,
+};
+
+export const useVtonStore = create<VtonState>()(
+  persist(
+    (set) => ({
+      ...emptyFlow,
+      setInitialInput: (value) => set({ initialInput: value }),
+      setRecommendation: (value) => set({ recommendation: value }),
+      setSelectedModel: (value) => set({ selectedModel: value }),
+      setMannequin: (value) => set({ mannequin: value }),
+      setProductUrl: (value) => set({ productUrl: value }),
+      setProductSource: (value) => set({ productSource: value }),
+      setProductDetails: (value) => set({ productDetails: value }),
+      setGarment: (value) => set({ garment: value }),
+      setFitCheckResult: (value) => set({ fitCheckResult: value }),
+      setFrontRender: (value) => set({ frontRender: value }),
+      setVtonPayload: (value) => set({ vtonPayload: value }),
+      setVtonResult: (value) => set({ vtonResult: value }),
+      resetFlow: () => set({ ...emptyFlow }),
     }),
-}));
+    {
+      name: "vton-flow-state-v2",
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        initialInput: state.initialInput,
+        recommendation: state.recommendation,
+        selectedModel: state.selectedModel,
+        mannequin: state.mannequin,
+        productUrl: state.productUrl,
+        productSource: state.productSource,
+        productDetails: state.productDetails,
+        garment: state.garment,
+        fitCheckResult: state.fitCheckResult,
+        frontRender: state.frontRender,
+        vtonPayload: state.vtonPayload,
+        vtonResult: state.vtonResult,
+      }),
+    }
+  )
+);

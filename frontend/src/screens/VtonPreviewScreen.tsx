@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Image, ScrollView, Text, View } from "react-native";
 
 import {
+  createMockVton,
   prepareVton,
   renderMannequinFront,
   resolveApiUrl,
@@ -12,6 +13,7 @@ import {
   AppScreen,
   FashionCard,
   FriendlyError,
+  InfoPill,
   JourneyStepper,
   LoadingState,
   PrimaryButton,
@@ -47,7 +49,9 @@ export function VtonPreviewScreen({
   const [error, setError] = useState<string | null>(null);
   const [taskMessage, setTaskMessage] = useState<string | null>(null);
 
-  const processedGarmentUrl = resolveApiUrl(garment?.processed_url);
+  const hasGarmentImage = Boolean(garment?.processed_url || garment?.original_url);
+  const preferredMode: VtonRunMode = hasGarmentImage ? "auto" : "mock";
+  const processedGarmentUrl = resolveApiUrl(garment?.processed_url || garment?.original_url);
   const mannequinRenderUrl = resolveApiUrl(mannequinRender?.image_url);
 
   async function ensureFrontRender(): Promise<MannequinRenderResult | null> {
@@ -58,7 +62,7 @@ export function VtonPreviewScreen({
     return rendered;
   }
 
-  async function run(mode: VtonRunMode = "auto") {
+  async function run(mode: VtonRunMode = preferredMode) {
     let coldStartTimer: ReturnType<typeof setTimeout> | null = null;
 
     try {
@@ -69,7 +73,7 @@ export function VtonPreviewScreen({
         setTaskMessage(CLOUD_COLD_START_MESSAGE);
       }, 3500);
 
-      const front = await ensureFrontRender();
+      const front = mode === "mock" ? null : await ensureFrontRender();
 
       const prepared = await prepareVton({
         mannequin,
@@ -79,7 +83,26 @@ export function VtonPreviewScreen({
         fit_zones: fitZones,
       });
 
-      setTaskMessage("Gerando uma prévia visual do look...");
+      if (mode === "mock") {
+        setTaskMessage("Gerando uma prévia estimada do caimento...");
+        const mock = await createMockVton({ payload: prepared });
+        const result: VtonRunResult = {
+          result_url: mock.result_url,
+          result_path: mock.result_path,
+          provider: "local_mock",
+          mode_requested: "mock",
+          status: "succeeded",
+          used_fallback: false,
+          success: true,
+          message: mock.message,
+          raw_response: null,
+        };
+
+        onResultReady?.({ result, payload: prepared, frontRender: null });
+        return;
+      }
+
+      setTaskMessage("Tentando gerar a versão VTON real primeiro...");
       const result = await runVtonTaskWithPolling(
         {
           payload: prepared,
@@ -99,6 +122,7 @@ export function VtonPreviewScreen({
       );
 
       onResultReady?.({ result, payload: prepared, frontRender: front ?? null });
+
     } catch (err) {
       setError(err instanceof Error ? err.message : "Tente novamente em instantes.");
     } finally {
@@ -123,11 +147,11 @@ export function VtonPreviewScreen({
 
         <Mannequin3D params={mannequin} fitZones={fitZones} />
 
-        {processedGarmentUrl ? (
-          <FashionCard highlighted>
-            <Text style={{ color: fashionColors.text, fontWeight: "900" }}>
-              Peça escolhida
-            </Text>
+        <FashionCard highlighted={hasGarmentImage}>
+          <Text style={{ color: fashionColors.text, fontWeight: "900", fontSize: 17 }}>
+            {hasGarmentImage ? "Peça escolhida" : "Sem imagem da peça"}
+          </Text>
+          {processedGarmentUrl ? (
             <Image
               source={{ uri: processedGarmentUrl }}
               style={{
@@ -138,22 +162,26 @@ export function VtonPreviewScreen({
               }}
               resizeMode="contain"
             />
-          </FashionCard>
-        ) : (
-          <FashionCard>
-            <Text style={{ color: fashionColors.text, fontWeight: "900" }}>
-              Sem imagem da peça
-            </Text>
+          ) : (
             <Text style={{ color: fashionColors.textSoft, lineHeight: 21 }}>
-              Ainda assim podemos gerar uma prévia estimada com molde visual. Para melhor resultado, envie uma foto ou cole um link da peça.
+              Podemos gerar uma prévia estimada com molde visual. Para tentar o VTON real, envie uma foto da peça ou use um link que traga a imagem do produto.
             </Text>
-          </FashionCard>
-        )}
+          )}
+        </FashionCard>
+
+        <FashionCard>
+          <InfoPill label={hasGarmentImage ? "Tenta VTON real primeiro" : "Prévia estimada"} tone={hasGarmentImage ? "purple" : "gold"} />
+          <Text style={{ color: fashionColors.textSoft, lineHeight: 21, marginTop: 8 }}>
+            {hasGarmentImage
+              ? "Vamos tentar a API VTON real. Se ela estiver indisponível, o app usa o mock local para você não perder o fluxo."
+              : "Como ainda não temos imagem utilizável da peça, esta etapa usa o mock local melhorado."}
+          </Text>
+        </FashionCard>
 
         <PrimaryButton
-          label={loadingMode ? "Gerando prévia..." : "Gerar prévia do look"}
+          label={loadingMode ? "Gerando prévia..." : hasGarmentImage ? "Gerar melhor prévia disponível" : "Gerar prévia estimada"}
           loading={Boolean(loadingMode)}
-          onPress={() => run("auto")}
+          onPress={() => run(preferredMode)}
         />
 
         {loadingMode && taskMessage ? (

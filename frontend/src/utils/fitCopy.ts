@@ -22,6 +22,10 @@ export function fitZoneLabel(zone: string): string {
       return "Coxa";
     case "shoulder":
       return "Ombros";
+    case "rise":
+      return "Gancho";
+    case "wrist":
+      return "Punho";
     default:
       return zone;
   }

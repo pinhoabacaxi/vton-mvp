@@ -49,8 +49,6 @@ export function ProvadorHubScreen({
         />
         <JourneyStepper activeStep="piece" />
 
-        <MannequinPreviewScreen mannequin={mannequin} showHeader={false} />
-
         <FashionCard highlighted>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
             <Text style={{ color: fashionColors.text, fontSize: 18, fontWeight: "900", flex: 1 }}>
@@ -87,6 +85,8 @@ export function ProvadorHubScreen({
             <SecondaryButton label="Meu armário" onPress={onOpenCloset} />
           </View>
         </View>
+
+        <MannequinPreviewScreen mannequin={mannequin} showHeader={false} />
       </ScrollView>
     </AppScreen>
   );

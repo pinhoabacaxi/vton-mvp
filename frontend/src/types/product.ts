@@ -43,6 +43,10 @@ export type ProductScrapeResult = {
   normalized_sizes: SizeMeasurement[];
   fabric_composition_text?: string | null;
   fabric_analysis?: FabricAnalysis | null;
+  confidence_score?: number | null;
+  extraction_method?: string | null;
+  fallback_reason?: string | null;
+  blocked_by_antibot?: boolean;
 };
 
 export type GarmentUploadResult = {

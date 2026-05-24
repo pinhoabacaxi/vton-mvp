@@ -55,6 +55,15 @@ function friendlyNetworkMessage(): string {
 function friendlyServerMessage(text?: string | null): string {
   const lower = (text ?? "").toLowerCase();
 
+  if (
+    lower.includes("bloqueou a leitura automática") ||
+    lower.includes("antibot") ||
+    lower.includes("challenge") ||
+    lower.includes("captcha")
+  ) {
+    return "A loja bloqueou a leitura automática. Você pode enviar um print da tabela de medidas ou preencher as medidas manualmente.";
+  }
+
   if (lower.includes("timeout") || lower.includes("tempo limite")) {
     return "A prévia demorou mais que o esperado. O servidor pode estar iniciando; tente novamente em alguns instantes.";
   }
@@ -168,6 +177,34 @@ export async function scrapeProduct(
     method: "POST",
     body: JSON.stringify({ url }),
   });
+}
+
+export async function uploadSizeChartImage(
+  file: {
+    uri: string;
+    name: string;
+    type: string;
+  }
+): Promise<ProductScrapeResult> {
+  const formData = new FormData();
+
+  formData.append("file", {
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
+  } as unknown as Blob);
+
+  const response = await fetchWithTimeout(`${API_BASE_URL}/product/ocr-size-chart`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(friendlyServerMessage(text));
+  }
+
+  return response.json() as Promise<ProductScrapeResult>;
 }
 
 export async function uploadGarmentImage(

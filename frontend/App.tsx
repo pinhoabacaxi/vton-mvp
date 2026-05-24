@@ -1,11 +1,12 @@
 ﻿import "react-native-gesture-handler";
 import React, { useState, useEffect } from "react";
-import { ActivityIndicator, Alert, SafeAreaView, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, BackHandler, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { enableScreens } from "react-native-screens";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { recommendBodyModels, generateMannequin } from "./src/api/client";
 import { InitialBodyInput, BodyRecommendationResponse, BodyModel, FineTuneInput, MannequinParams } from "./src/types/body";
@@ -49,6 +50,26 @@ type RootStackParamList = {
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
+const LAST_ROUTE_KEY = "vton:last-route";
+const RESUMABLE_ROUTES: Array<keyof RootStackParamList> = [
+  "Home",
+  "Measurements",
+  "SelectModel",
+  "FineTune",
+  "Preview",
+  "ProductUrl",
+  "GarmentUpload",
+  "FitCheck",
+  "VtonPreview",
+  "VtonResult",
+  "LookHistory",
+  "Closet",
+];
+
+function isResumableRoute(value: string | null): value is keyof RootStackParamList {
+  return Boolean(value && RESUMABLE_ROUTES.includes(value as keyof RootStackParamList));
+}
 
 enableScreens();
 
@@ -94,6 +115,7 @@ export default function App() {
   const [bootingProfile, setBootingProfile] = useState(true);
   const [initialRouteName, setInitialRouteName] =
     useState<keyof RootStackParamList>("Home");
+  const [currentRouteName, setCurrentRouteName] = useState<keyof RootStackParamList>("Home");
   const looks = useHistoryStore((state) => state.looks);
   const loadHistory = useHistoryStore((state) => state.loadHistory);
   const addLook = useHistoryStore((state) => state.addLook);
@@ -134,8 +156,9 @@ export default function App() {
 
     async function boot() {
       try {
-        const [profile] = await Promise.all([
+        const [profile, lastRoute] = await Promise.all([
           loadSavedBodyProfile(),
+          AsyncStorage.getItem(LAST_ROUTE_KEY),
           loadHistory(),
           loadCloset(),
         ]);
@@ -146,7 +169,9 @@ export default function App() {
           setInitialInput(profile.initial_input);
           setSelectedModel(profile.selected_model);
           setMannequin(profile.mannequin);
-          setInitialRouteName("Home");
+          const routeToResume = isResumableRoute(lastRoute) ? lastRoute : "Home";
+          setInitialRouteName(routeToResume);
+          setCurrentRouteName(routeToResume);
         }
       } finally {
         if (mounted) {
@@ -168,6 +193,37 @@ export default function App() {
     setSelectedModel,
   ]);
 
+  function rememberCurrentRoute() {
+    const routeName = navigationRef.getCurrentRoute()?.name as keyof RootStackParamList | undefined;
+    if (!routeName) return;
+    setCurrentRouteName(routeName);
+    void AsyncStorage.setItem(LAST_ROUTE_KEY, routeName);
+  }
+
+  function handleGlobalBack() {
+    const routeName = navigationRef.getCurrentRoute()?.name as keyof RootStackParamList | undefined;
+    if (routeName && routeName !== "Home" && navigationRef.canGoBack()) {
+      navigationRef.goBack();
+      return;
+    }
+    if (routeName && routeName !== "Home" && navigationRef.isReady()) {
+      navigationRef.navigate("Home");
+      return;
+    }
+  }
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      const routeName = navigationRef.getCurrentRoute()?.name as keyof RootStackParamList | undefined;
+      if (routeName && routeName !== "Home") {
+        handleGlobalBack();
+        return true;
+      }
+      return false;
+    });
+
+    return () => subscription.remove();
+  }, []);
   async function handleInitialSubmit(data: InitialBodyInput, navigation: any) {
     setInitialInput(data);
     setLoading(true);
@@ -246,7 +302,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef} onReady={rememberCurrentRoute} onStateChange={rememberCurrentRoute}>
         <Stack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Home">
             {(props) => (
@@ -475,6 +531,16 @@ export default function App() {
             }
           </Stack.Screen>
         </Stack.Navigator>
+        {currentRouteName !== "Home" ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Voltar para a tela anterior"
+            onPress={handleGlobalBack}
+            style={styles.backPill}
+          >
+            <Text style={styles.backPillText}>Voltar</Text>
+          </TouchableOpacity>
+        ) : null}
         {loading && (
           <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
             <ActivityIndicator size="large" color="white" />
@@ -485,3 +551,29 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  backPill: {
+    position: "absolute",
+    top: 44,
+    left: 16,
+    zIndex: 30,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: "rgba(32, 12, 52, 0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(216, 199, 255, 0.45)",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  backPillText: {
+    color: "#f7f0ff",
+    fontWeight: "900",
+    fontSize: 15,
+  },
+});
