@@ -3,6 +3,8 @@ package com.anonymous.vtonmvp
 import android.os.Build
 import android.os.Bundle
 
+import androidx.activity.OnBackPressedCallback
+
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -17,6 +19,12 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+
+    onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+      override fun handleOnBackPressed() {
+        reactNativeHost.reactInstanceManager.onBackPressed()
+      }
+    })
   }
 
   /**

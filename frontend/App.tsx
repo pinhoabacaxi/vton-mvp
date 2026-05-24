@@ -1,5 +1,5 @@
 ﻿import "react-native-gesture-handler";
-import React, { useState, useEffect } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { ActivityIndicator, Alert, BackHandler, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -114,9 +114,11 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [bootingProfile, setBootingProfile] = useState(true);
   const [flowHydrated, setFlowHydrated] = useState(() => useVtonStore.persist.hasHydrated());
-  const [initialRouteName, setInitialRouteName] =
+  const [resumeRouteName, setResumeRouteName] =
     useState<keyof RootStackParamList>("Home");
+  const [navigationReady, setNavigationReady] = useState(false);
   const [currentRouteName, setCurrentRouteName] = useState<keyof RootStackParamList>("Home");
+  const resumeAppliedRef = useRef(false);
   const looks = useHistoryStore((state) => state.looks);
   const loadHistory = useHistoryStore((state) => state.loadHistory);
   const addLook = useHistoryStore((state) => state.addLook);
@@ -187,8 +189,8 @@ export default function App() {
 
         const routeToResume = isResumableRoute(lastRoute) ? lastRoute : "Home";
         console.info("[State] Last route loaded", { route: routeToResume });
-        setInitialRouteName(routeToResume);
-        setCurrentRouteName(routeToResume);
+        setResumeRouteName(routeToResume);
+        setCurrentRouteName("Home");
       } finally {
         if (mounted) {
           setBootingProfile(false);
@@ -217,32 +219,50 @@ export default function App() {
     void AsyncStorage.setItem(LAST_ROUTE_KEY, routeName);
   }
 
-  function handleGlobalBack() {
-    const routeName = navigationRef.getCurrentRoute()?.name as keyof RootStackParamList | undefined;
+  useEffect(() => {
+    if (!navigationReady || resumeAppliedRef.current || resumeRouteName === "Home") {
+      return;
+    }
+
+    resumeAppliedRef.current = true;
+    console.info("[Flow] Resuming saved route", { route: resumeRouteName });
+    requestAnimationFrame(() => {
+      if (navigationRef.isReady()) {
+        navigationRef.navigate(resumeRouteName);
+      }
+    });
+  }, [navigationReady, resumeRouteName]);
+
+  function getActiveRouteName(): keyof RootStackParamList {
+    const navRoute = navigationRef.getCurrentRoute()?.name as keyof RootStackParamList | undefined;
+    if (navRoute && navRoute !== "Home") {
+      return navRoute;
+    }
+    return currentRouteName;
+  }
+
+  function handleGlobalBack(): boolean {
+    const routeName = getActiveRouteName();
     if (routeName && routeName !== "Home" && navigationRef.canGoBack()) {
       console.info("[Flow] Android back", { from: routeName, action: "goBack" });
       navigationRef.goBack();
-      return;
+      return true;
     }
     if (routeName && routeName !== "Home" && navigationRef.isReady()) {
       console.info("[Flow] Android back", { from: routeName, action: "navigateHome" });
       navigationRef.navigate("Home");
-      return;
+      return true;
     }
+    return false;
   }
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      const routeName = navigationRef.getCurrentRoute()?.name as keyof RootStackParamList | undefined;
-      if (routeName && routeName !== "Home") {
-        handleGlobalBack();
-        return true;
-      }
-      return false;
+      return handleGlobalBack();
     });
 
     return () => subscription.remove();
-  }, []);
+  }, [currentRouteName]);
   async function handleInitialSubmit(data: InitialBodyInput, navigation: any) {
     setInitialInput(data);
     setLoading(true);
@@ -321,8 +341,15 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer ref={navigationRef} onReady={rememberCurrentRoute} onStateChange={rememberCurrentRoute}>
-        <Stack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
+      <NavigationContainer
+        ref={navigationRef}
+        onReady={() => {
+          setNavigationReady(true);
+          rememberCurrentRoute();
+        }}
+        onStateChange={rememberCurrentRoute}
+      >
+        <Stack.Navigator initialRouteName="Home" screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Home">
             {(props) => (
               <HomeScreen
