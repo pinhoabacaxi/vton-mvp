@@ -1,0 +1,21 @@
+{
+  "source": "female_base.png",
+  "family": "neutral",
+  "format": "transparent_png_from_blender_render",
+  "preview_size": [
+    360,
+    480
+  ],
+  "mock_size": [
+    900,
+    1200
+  ],
+  "variants": [
+    "balanced_soft",
+    "wide_shoulder",
+    "wide_hip",
+    "straight_frame",
+    "athletic_compact",
+    "full_soft"
+  ]
+}

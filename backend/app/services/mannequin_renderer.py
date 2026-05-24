@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,6 +14,10 @@ PREVIEW_SIZE = (360, 480)
 SUPERSAMPLE_SCALE = 2
 MANNEQUIN_DIR = UPLOAD_DIR / "mannequin"
 MANNEQUIN_PREVIEW_DIR = MANNEQUIN_DIR / "previews"
+BODY_MESH_ASSET_DIR = Path(__file__).resolve().parents[1] / "assets" / "body_mesh"
+BODY_MESH_PREVIEW_DIR = BODY_MESH_ASSET_DIR / "previews"
+BODY_MESH_MOCK_DIR = BODY_MESH_ASSET_DIR / "mock"
+BODY_MESH_FAMILY_DIR = BODY_MESH_ASSET_DIR / "families"
 
 MANNEQUIN_DIR.mkdir(parents=True, exist_ok=True)
 MANNEQUIN_PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
@@ -54,6 +59,14 @@ def render_tryon_person_scene(
 
 
 def render_body_model_preview(base_model_id: str) -> str:
+    asset_preview = _mesh_preview_asset_path(base_model_id)
+    output_path = MANNEQUIN_PREVIEW_DIR / f"{base_model_id}.png"
+
+    if _use_mesh_asset_mannequin() and asset_preview.exists():
+        with Image.open(asset_preview) as asset:
+            asset.convert("RGBA").save(output_path, "PNG", optimize=True)
+        return absolute_url(f"/uploads/mannequin/previews/{base_model_id}.png")
+
     from app.models.body import FineTuneInput
     from app.services.body_recommender import build_mannequin_params
 
@@ -79,7 +92,6 @@ def render_body_model_preview(base_model_id: str) -> str:
         include_label=False,
     )
 
-    output_path = MANNEQUIN_PREVIEW_DIR / f"{base_model_id}.png"
     image.save(output_path, "PNG", optimize=True)
     return absolute_url(f"/uploads/mannequin/previews/{base_model_id}.png")
 
@@ -89,6 +101,15 @@ def render_mannequin_scene(
     size: tuple[int, int] = CANVAS_SIZE,
     include_label: bool = False,
 ) -> tuple[Image.Image, Image.Image, Image.Image, Image.Image]:
+    asset_scene = _render_mesh_asset_scene(mannequin, size)
+    if asset_scene is not None:
+        scene, body_alpha, body_shadow, body_light = asset_scene
+        if include_label:
+            draw = ImageDraw.Draw(scene)
+            label_xy = (int(size[0] * 0.045), int(size[1] * 0.035))
+            draw.text(label_xy, "Mannequin frontal", fill="#e9d5ff")
+        return scene, body_alpha, body_shadow, body_light
+
     high_size = (size[0] * SUPERSAMPLE_SCALE, size[1] * SUPERSAMPLE_SCALE)
     scene = _create_background(high_size)
     body_layer, body_alpha, body_shadow, body_light = build_parametric_body_layers(
@@ -119,6 +140,118 @@ def draw_parametric_body(
     return _downsample_rgba(body_layer, size)
 
 
+def _render_mesh_asset_scene(
+    mannequin,
+    size: tuple[int, int],
+) -> tuple[Image.Image, Image.Image, Image.Image, Image.Image] | None:
+    if not _use_mesh_asset_mannequin():
+        return None
+
+    model_id = str(getattr(mannequin, "base_model_id", "balanced_soft") or "balanced_soft")
+    asset_path = _mesh_mock_asset_path(model_id)
+    if not asset_path.exists():
+        asset_path = _mesh_mock_asset_path("balanced_soft")
+    if not asset_path.exists():
+        return None
+
+    with Image.open(asset_path) as asset:
+        body_layer = _fit_mesh_asset_to_canvas(asset.convert("RGBA"), size)
+
+    body_layer = _morph_mesh_asset_to_measurements(body_layer, mannequin)
+    body_alpha = body_layer.getchannel("A")
+    ambient_occlusion = _build_ambient_occlusion_mask(body_alpha, size)
+    body_shadow = _draw_soft_shadow(body_alpha, ambient_occlusion, size)
+    body_light = _draw_torso_volume(body_alpha, size)
+
+    scene = _create_background(size)
+    scene.alpha_composite(body_layer)
+    return scene, body_alpha, body_shadow, body_light
+
+
+def _fit_mesh_asset_to_canvas(asset: Image.Image, size: tuple[int, int]) -> Image.Image:
+    if asset.size == size:
+        return asset.copy()
+
+    fitted = Image.new("RGBA", size, (0, 0, 0, 0))
+    scale = min(size[0] / max(1, asset.width), size[1] / max(1, asset.height))
+    resized = asset.resize(
+        (max(1, int(asset.width * scale)), max(1, int(asset.height * scale))),
+        Image.Resampling.LANCZOS,
+    )
+    left = (size[0] - resized.width) // 2
+    top = (size[1] - resized.height) // 2
+    fitted.alpha_composite(resized, (left, top))
+    return fitted
+
+
+def _morph_mesh_asset_to_measurements(image: Image.Image, mannequin) -> Image.Image:
+    width, height = image.size
+    morphed = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    band_height = max(2, height // 260)
+
+    for top in range(0, height, band_height):
+        bottom = min(height, top + band_height)
+        band = image.crop((0, top, width, bottom))
+        scale = _mesh_asset_band_scale((top + bottom) * 0.5 / max(1, height), mannequin)
+        resized_width = max(1, int(width * scale))
+        resized_band = band.resize((resized_width, bottom - top), Image.Resampling.LANCZOS)
+
+        if resized_width > width:
+            crop_left = (resized_width - width) // 2
+            resized_band = resized_band.crop((crop_left, 0, crop_left + width, bottom - top))
+            morphed.alpha_composite(resized_band, (0, top))
+        else:
+            left = (width - resized_width) // 2
+            morphed.alpha_composite(resized_band, (left, top))
+
+    alpha = morphed.getchannel("A").filter(ImageFilter.GaussianBlur(radius=max(0.2, width * 0.0007)))
+    morphed.putalpha(alpha)
+    return morphed
+
+
+def _mesh_asset_band_scale(y_ratio: float, mannequin) -> float:
+    scale = 1.0
+    scale += (_bounded_scale(mannequin, "shoulder_scale", 0.78, 1.30) - 1.0) * _band_weight(y_ratio, 0.305, 0.060) * 0.28
+    scale += (_bounded_scale(mannequin, "chest_scale", 0.76, 1.34) - 1.0) * _band_weight(y_ratio, 0.395, 0.095) * 0.30
+    scale += (_bounded_scale(mannequin, "waist_scale", 0.72, 1.38) - 1.0) * _band_weight(y_ratio, 0.510, 0.075) * 0.26
+    scale += (_bounded_scale(mannequin, "hip_scale", 0.76, 1.38) - 1.0) * _band_weight(y_ratio, 0.615, 0.085) * 0.30
+    scale += (_bounded_scale(mannequin, "thigh_scale", 0.72, 1.55) - 1.0) * _band_weight(y_ratio, 0.745, 0.115) * 0.22
+    scale += (_bounded_scale(mannequin, "biceps_scale", 0.72, 1.55) - 1.0) * _band_weight(y_ratio, 0.430, 0.160) * 0.08
+    return max(0.88, min(1.16, scale))
+
+
+def _band_weight(position: float, center: float, radius: float) -> float:
+    distance = abs(position - center) / max(radius, 0.001)
+    if distance >= 1.0:
+        return 0.0
+    return (1.0 - distance * distance) ** 2
+
+
+def _mesh_preview_asset_path(base_model_id: str) -> Path:
+    family_path = BODY_MESH_FAMILY_DIR / _mesh_asset_family() / "previews" / f"{base_model_id}.png"
+    if family_path.exists():
+        return family_path
+    neutral_path = BODY_MESH_FAMILY_DIR / "neutral" / "previews" / f"{base_model_id}.png"
+    if neutral_path.exists():
+        return neutral_path
+    return BODY_MESH_PREVIEW_DIR / f"{base_model_id}.png"
+
+
+def _mesh_mock_asset_path(base_model_id: str, family: str | None = None) -> Path:
+    selected_family = family or _mesh_asset_family()
+    family_path = BODY_MESH_FAMILY_DIR / selected_family / "mock" / f"{base_model_id}.png"
+    if family_path.exists():
+        return family_path
+    neutral_path = BODY_MESH_FAMILY_DIR / "neutral" / "mock" / f"{base_model_id}.png"
+    if neutral_path.exists():
+        return neutral_path
+    return BODY_MESH_MOCK_DIR / f"{base_model_id}.png"
+
+
+def _mesh_asset_family() -> str:
+    return os.getenv("VTON_BODY_MESH_FAMILY", "neutral").strip().lower() or "neutral"
+
+
 def build_parametric_body_layers(
     mannequin,
     size: tuple[int, int] = CANVAS_SIZE,
@@ -129,7 +262,7 @@ def build_parametric_body_layers(
     body_light = _draw_torso_volume(body_alpha, size)
 
     skin_rgb = _apply_skin_texture(
-        Image.new("RGB", size, _skin_rgb(getattr(mannequin, "skin_tone", "medium"))),
+        Image.new("RGB", size, _body_material_rgb(getattr(mannequin, "skin_tone", "medium"))),
         body_alpha,
     )
 
@@ -141,11 +274,13 @@ def build_parametric_body_layers(
 
     body_layer = Image.merge("RGBA", (*shaded_rgb.split(), body_alpha))
 
-    highlight = Image.new("RGBA", size, (255, 246, 235, 0))
+    highlight = Image.new("RGBA", size, (*_body_highlight_rgb(), 0))
     highlight.putalpha(body_light.point(lambda value: int(value * 0.70)))
     body_layer = Image.alpha_composite(body_layer, highlight)
 
-    rim_light = Image.new("RGBA", size, (120, 78, 205, 0))
+    body_layer = _apply_surface_anatomy(body_layer, body_alpha, size)
+
+    rim_light = Image.new("RGBA", size, (*_body_rim_rgb(), 0))
     rim_light.putalpha(_build_rim_light_mask(body_alpha, size))
     body_layer = Image.alpha_composite(body_layer, rim_light)
 
@@ -532,6 +667,85 @@ def _draw_soft_highlight(
     draw.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=fill)
 
 
+def _apply_surface_anatomy(
+    body_layer: Image.Image,
+    body_alpha: Image.Image,
+    size: tuple[int, int],
+) -> Image.Image:
+    """Add subtle mannequin anatomy without turning the render into a diagram."""
+
+    width, height = size
+    detail_alpha = Image.new("L", size, 0)
+    draw = ImageDraw.Draw(detail_alpha)
+    line_width = max(2, width // 220)
+    cx = width // 2
+
+    draw.arc(
+        (width * 0.36, height * 0.285, width * 0.50, height * 0.385),
+        205,
+        350,
+        fill=42,
+        width=line_width,
+    )
+    draw.arc(
+        (width * 0.50, height * 0.285, width * 0.64, height * 0.385),
+        190,
+        335,
+        fill=42,
+        width=line_width,
+    )
+    draw.line(
+        (cx, height * 0.352, cx, height * 0.555),
+        fill=28,
+        width=max(1, line_width - 1),
+    )
+    draw.arc(
+        (width * 0.365, height * 0.405, width * 0.635, height * 0.585),
+        20,
+        160,
+        fill=24,
+        width=max(1, line_width - 1),
+    )
+    draw.arc(
+        (width * 0.355, height * 0.590, width * 0.645, height * 0.765),
+        200,
+        340,
+        fill=36,
+        width=line_width,
+    )
+    draw.arc(
+        (width * 0.385, height * 0.732, width * 0.490, height * 0.835),
+        250,
+        345,
+        fill=32,
+        width=max(1, line_width - 1),
+    )
+    draw.arc(
+        (width * 0.510, height * 0.732, width * 0.615, height * 0.835),
+        195,
+        290,
+        fill=32,
+        width=max(1, line_width - 1),
+    )
+
+    detail_alpha = detail_alpha.filter(ImageFilter.GaussianBlur(radius=max(2, width * 0.004)))
+    detail_alpha = ImageChops.multiply(detail_alpha, body_alpha)
+    detail = Image.new("RGBA", size, (*_body_detail_rgb(), 0))
+    detail.putalpha(detail_alpha.point(lambda value: int(value * 0.74)))
+
+    soft_highlight = Image.new("L", size, 0)
+    highlight_draw = ImageDraw.Draw(soft_highlight)
+    highlight_draw.ellipse((width * 0.42, height * 0.315, width * 0.58, height * 0.505), fill=38)
+    highlight_draw.ellipse((width * 0.405, height * 0.670, width * 0.475, height * 0.900), fill=30)
+    highlight_draw.ellipse((width * 0.525, height * 0.670, width * 0.595, height * 0.900), fill=30)
+    soft_highlight = soft_highlight.filter(ImageFilter.GaussianBlur(radius=max(8, width * 0.017)))
+    soft_highlight = ImageChops.multiply(soft_highlight, body_alpha)
+    light = Image.new("RGBA", size, (*_body_highlight_rgb(), 0))
+    light.putalpha(soft_highlight.point(lambda value: int(value * 0.58)))
+
+    return Image.alpha_composite(Image.alpha_composite(body_layer, detail), light)
+
+
 def _build_ambient_occlusion_mask(body_alpha: Image.Image, size: tuple[int, int]) -> Image.Image:
     width, height = size
     ao = Image.new("L", size, 0)
@@ -705,6 +919,48 @@ def _downsample_rgba(image: Image.Image, size: tuple[int, int]) -> Image.Image:
 
 def _downsample_l(image: Image.Image, size: tuple[int, int]) -> Image.Image:
     return image.resize(size, Image.Resampling.LANCZOS)
+
+
+def _use_premium_gray_material() -> bool:
+    return os.getenv("VTON_MOCK_BODY_STYLE", "premium_gray").strip().lower() in {
+        "premium_gray",
+        "matte_gray",
+        "gray",
+        "fiberglass",
+    }
+
+
+def _use_mesh_asset_mannequin() -> bool:
+    return os.getenv("VTON_USE_MESH_ASSET_MANNEQUIN", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "sim",
+    }
+
+
+def _body_material_rgb(tone: str) -> tuple[int, int, int]:
+    if _use_premium_gray_material():
+        return (196, 197, 193)
+    return _skin_rgb(tone)
+
+
+def _body_highlight_rgb() -> tuple[int, int, int]:
+    if _use_premium_gray_material():
+        return (244, 245, 241)
+    return (255, 246, 235)
+
+
+def _body_detail_rgb() -> tuple[int, int, int]:
+    if _use_premium_gray_material():
+        return (93, 94, 91)
+    return (98, 63, 45)
+
+
+def _body_rim_rgb() -> tuple[int, int, int]:
+    if _use_premium_gray_material():
+        return (218, 220, 216)
+    return (120, 78, 205)
 
 
 def _skin_rgb(tone: str) -> tuple[int, int, int]:
