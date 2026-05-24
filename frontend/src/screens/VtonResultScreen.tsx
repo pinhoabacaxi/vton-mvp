@@ -269,7 +269,7 @@ function buildPreviewSourceInfo(result: VtonRunResult): {
     return {
       label: "Prévia Realista",
       title: "Prévia realista gerada por IA",
-      message: "A API VTON conseguiu processar uma imagem humana compatível e a foto da peça. Use como referência visual, não como promessa de caimento perfeito.",
+      message: "Conseguimos combinar uma imagem humana compatível com a foto da peça para criar uma referência visual mais próxima do real. Use como guia, não como promessa de caimento perfeito.",
       tone: "purple",
     };
   }
@@ -290,7 +290,7 @@ function buildPreviewSourceInfo(result: VtonRunResult): {
     return {
       label: "Prévia Realista",
       title: "Prévia realista gerada por IA",
-      message: "A API VTON conseguiu processar a imagem da pessoa e da peça. Ainda assim, considere o resultado uma estimativa visual.",
+      message: "Conseguimos criar uma referência visual realista com a imagem da pessoa e da peça. Ainda assim, considere o resultado uma estimativa.",
       tone: "purple",
     };
   }

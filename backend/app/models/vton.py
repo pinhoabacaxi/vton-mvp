@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Literal
 
@@ -15,6 +16,7 @@ class VtonPrepareInput(BaseModel):
     garment_processed_url: Optional[str] = None
     garment_original_url: Optional[str] = None
     person_image_url: Optional[str] = None
+    user_uploaded_person_image_url: Optional[str] = None
     fit_zones: List[FitZone] = []
 
 
@@ -23,6 +25,7 @@ class VtonPayload(BaseModel):
     garment_processed_url: Optional[str]
     garment_original_url: Optional[str]
     person_image_url: Optional[str] = None
+    user_uploaded_person_image_url: Optional[str] = None
     fit_zones: List[FitZone]
     render_mode: str
     recommended_view_count: int
@@ -72,3 +75,9 @@ class VtonTaskStatusResponse(BaseModel):
     result: Optional[VtonRunResult] = None
     error: Optional[str] = None
     poll_after_seconds: int = 2
+
+
+class PersonEphemeralUploadResult(BaseModel):
+    person_image_url: str
+    expires_in_seconds: int
+    message: str

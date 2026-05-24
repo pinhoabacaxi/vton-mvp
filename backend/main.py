@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,7 @@ from app.models.vton import (
     VtonRunResult,
     VtonTaskCreated,
     VtonTaskStatusResponse,
+    PersonEphemeralUploadResult,
 )
 from app.models.mannequin import MannequinRenderInput, MannequinRenderResult
 from app.services.body_recommender import (
@@ -307,6 +309,37 @@ async def upload_garment(file: UploadFile = File(...)):
         raise HTTPException(
             status_code=400,
             detail=f"Erro ao processar imagem: {error}",
+        ) from error
+
+
+@app.post("/person/upload-ephemeral", response_model=PersonEphemeralUploadResult)
+async def upload_ephemeral_person(file: UploadFile = File(...)):
+    try:
+        from app.services.person_image_store import save_ephemeral_person_upload
+
+        reference, expires_in_seconds = await save_ephemeral_person_upload(file)
+        return PersonEphemeralUploadResult(
+            person_image_url=reference,
+            expires_in_seconds=expires_in_seconds,
+            message=(
+                "Foto recebida para esta sessão. Ela será removida do servidor "
+                "automaticamente após a geração da prévia ou ao expirar."
+            ),
+        )
+
+    except ImportError as error:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Recurso indisponível: dependência ausente para preparar "
+                f"foto de pessoa ({error})."
+            ),
+        ) from error
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Não foi possível preparar a foto: {error}",
         ) from error
 
 

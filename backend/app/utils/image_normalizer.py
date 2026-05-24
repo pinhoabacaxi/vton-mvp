@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 from dataclasses import dataclass
 from io import BytesIO

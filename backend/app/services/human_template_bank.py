@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Human template selection for neural VTON providers.
 
 The local fit diagram can use procedural mannequin assets, but neural VTON
@@ -10,13 +11,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, Literal, Optional
 
 from app.models.vton import VtonPayload
 
 
 DEFAULT_TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "assets" / "human_templates"
 SUPPORTED_TEMPLATE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+BodyMeasurementBand = Literal["petite", "regular", "full"]
 
 TEMPLATE_ALIASES: dict[str, tuple[str, ...]] = {
     "balanced_soft": ("balanced_soft", "balanced", "default"),
@@ -27,7 +29,7 @@ TEMPLATE_ALIASES: dict[str, tuple[str, ...]] = {
     "full_soft": ("full_soft", "plus", "full", "soft_plus"),
 }
 
-MEASUREMENT_BANDS = {
+MEASUREMENT_BANDS: dict[BodyMeasurementBand, tuple[str, ...]] = {
     "petite": ("petite", "compact"),
     "regular": ("regular", "standard"),
     "full": ("full", "plus", "curve"),
@@ -69,10 +71,17 @@ def select_human_template_path(payload: VtonPayload) -> Optional[Path]:
     return next((path for path in candidates if path.exists() and path.is_file()), None)
 
 
+def select_human_template_file(payload: VtonPayload) -> Optional[str]:
+    """Return the selected template as a string path for API/provider layers."""
+
+    path = select_human_template_path(payload)
+    return str(path) if path else None
+
+
 def _candidate_paths(
     template_dir: Path,
     aliases: Iterable[str],
-    measurement_band: str,
+    measurement_band: BodyMeasurementBand,
 ) -> Iterable[Path]:
     safe_aliases = [_safe_name(alias) for alias in aliases]
     band_aliases = MEASUREMENT_BANDS.get(measurement_band, (measurement_band,))
@@ -102,7 +111,7 @@ def _with_extensions(path_without_extension: Path) -> Iterable[Path]:
         yield path_without_extension.with_suffix(extension)
 
 
-def _measurement_band(payload: VtonPayload) -> str:
+def _measurement_band(payload: VtonPayload) -> BodyMeasurementBand:
     mannequin = payload.mannequin
     chest = float(getattr(mannequin, "chest_cm", 0) or 0)
     waist = float(getattr(mannequin, "waist_cm", 0) or 0)

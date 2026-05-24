@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from app.models.body import BodyModel, FineTuneInput, InitialBodyInput, MannequinParams
 from app.services.anthropometric_estimator import estimate_missing_measurements
 

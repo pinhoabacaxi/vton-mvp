@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Generate lightweight mannequin PNG assets from a human mesh or render.
 
 The backend should not depend on Blender or FBX importers at runtime. This

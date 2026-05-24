@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from pydantic import BaseModel
 
 from app.models.body import MannequinParams

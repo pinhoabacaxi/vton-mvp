@@ -23,6 +23,10 @@ services:
         value: premium_gray
       - key: VTON_HUMAN_TEMPLATE_DIR
         value: app/assets/human_templates
+      - key: UPLOAD_GC_DELAY_SECONDS
+        value: "1800"
+      - key: PERSON_EPHEMERAL_TTL_SECONDS
+        value: "1200"
       - key: REPLICATE_MODEL
         value: cuuupid/idm-vton
       - key: REPLICATE_API_TOKEN

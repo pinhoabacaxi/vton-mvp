@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from app.models.product import FitFeedbackInput, FitFeedbackResult

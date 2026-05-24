@@ -50,6 +50,28 @@ const emptyFlow = {
   vtonResult: null,
 };
 
+function stripEphemeralPersonImage(payload: VtonPayload | null): VtonPayload | null {
+  if (!payload) return null;
+
+  const personImage = payload.person_image_url ?? "";
+  const userPersonImage = payload.user_uploaded_person_image_url ?? "";
+  const hasEphemeralPerson =
+    personImage.startsWith("ephemeral://") || userPersonImage.startsWith("ephemeral://");
+
+  if (!hasEphemeralPerson) return payload;
+
+  return {
+    ...payload,
+    person_image_url: null,
+    user_uploaded_person_image_url: null,
+    api_ready_payload: {
+      ...payload.api_ready_payload,
+      person_image_url: null,
+      user_uploaded_person_image_url: null,
+    },
+  };
+}
+
 export const useVtonStore = create<VtonState>()(
   persist(
     (set) => ({
@@ -82,7 +104,7 @@ export const useVtonStore = create<VtonState>()(
         garment: state.garment,
         fitCheckResult: state.fitCheckResult,
         frontRender: state.frontRender,
-        vtonPayload: state.vtonPayload,
+        vtonPayload: stripEphemeralPersonImage(state.vtonPayload),
         vtonResult: state.vtonResult,
       }),
     }

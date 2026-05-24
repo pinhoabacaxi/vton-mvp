@@ -28,6 +28,7 @@ import {
   VtonRunResult,
   VtonTaskCreated,
   VtonTaskStatusResponse,
+  PersonEphemeralUploadResult,
 } from "../types/vton";
 import {
   MannequinRenderInput,
@@ -66,6 +67,17 @@ function friendlyServerMessage(text?: string | null): string {
 
   if (lower.includes("timeout") || lower.includes("tempo limite")) {
     return "A prévia demorou mais que o esperado. O servidor pode estar iniciando; tente novamente em alguns instantes.";
+  }
+
+  if (
+    lower.includes("provider") ||
+    lower.includes("fallback") ||
+    lower.includes("mock") ||
+    lower.includes("vton") ||
+    lower.includes("replicate") ||
+    lower.includes("hugging")
+  ) {
+    return "Não conseguimos criar a prévia mais realista agora. Você pode tentar novamente ou seguir com o Diagrama de Caimento Estimado.";
   }
 
   if (lower.includes("scrape") || lower.includes("product") || lower.includes("url")) {
@@ -233,6 +245,34 @@ export async function uploadGarmentImage(
   }
 
   return response.json() as Promise<GarmentUploadResult>;
+}
+
+export async function uploadEphemeralPersonImage(
+  file: {
+    uri: string;
+    name: string;
+    type: string;
+  }
+): Promise<PersonEphemeralUploadResult> {
+  const formData = new FormData();
+
+  formData.append("file", {
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
+  } as unknown as Blob);
+
+  const response = await fetchWithTimeout(`${API_BASE_URL}/person/upload-ephemeral`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(friendlyServerMessage(text));
+  }
+
+  return response.json() as Promise<PersonEphemeralUploadResult>;
 }
 
 export async function checkFit(

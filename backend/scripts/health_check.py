@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Production health check for the VTON MVP backend."""
 
 from __future__ import annotations

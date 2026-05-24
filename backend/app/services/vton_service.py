@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import asyncio
 import logging
 import os
@@ -46,6 +47,11 @@ from app.services.mannequin_renderer import (
     render_mannequin_scene,
     render_tryon_person_scene,
 )
+from app.services.person_image_store import (
+    delete_ephemeral_person_reference,
+    is_ephemeral_person_reference,
+)
+from app.services.storage_manager import schedule_upload_cleanup
 from app.services.url_utils import absolute_url
 from app.services.vton_render_pipeline import (
     GarmentRenderContext,
@@ -76,25 +82,27 @@ def prepare_vton_payload(data: VtonPrepareInput) -> VtonPayload:
         if data.garment_original_url
         else None
     )
+    user_uploaded_person_image_url = data.user_uploaded_person_image_url or None
+    person_source = user_uploaded_person_image_url or data.person_image_url
     person_image_url = (
-        absolute_url(data.person_image_url)
-        if data.person_image_url
+        absolute_url(person_source)
+        if person_source
         else None
     )
 
     notes = [
-        "Payload preparado para integracao futura com API VTON.",
-        "O mock local usa composicao por alpha, warp leve e sombra do manequim.",
+        "Payload preparado para Prévia Realista quando houver imagem compatível.",
+        "O fallback local gera um Diagrama de Caimento Estimado com base nas medidas.",
     ]
 
     if data.fit_zones:
-        notes.append("Fit zones incluidas para futura orientacao de caimento e heatmap.")
+        notes.append("Zonas de caimento incluídas para orientar o diagrama visual.")
 
     if garment_processed_url:
-        notes.append("Imagem de roupa sem fundo disponivel para composicao/VTON.")
+        notes.append("Imagem de roupa disponível para prévia visual.")
 
     if person_image_url:
-        notes.append("Imagem frontal do manequim adicionada ao payload como person_image_url.")
+        notes.append("Imagem de pessoa/base adicionada para tentativa de Prévia Realista.")
 
     api_ready_payload = {
         "person_representation": {
@@ -115,6 +123,7 @@ def prepare_vton_payload(data: VtonPrepareInput) -> VtonPayload:
             "base_model_id": data.mannequin.base_model_id,
         },
         "person_image_url": person_image_url,
+        "user_uploaded_person_image_url": user_uploaded_person_image_url,
         "garment": {
             "processed_url": garment_processed_url,
             "original_url": garment_original_url,
@@ -137,6 +146,7 @@ def prepare_vton_payload(data: VtonPrepareInput) -> VtonPayload:
         garment_processed_url=garment_processed_url,
         garment_original_url=garment_original_url,
         person_image_url=person_image_url,
+        user_uploaded_person_image_url=user_uploaded_person_image_url,
         fit_zones=data.fit_zones,
         render_mode="front_view",
         recommended_view_count=4,
@@ -175,7 +185,7 @@ def create_mock_vton_result(data: VtonMockInput) -> VtonMockResult:
         result_url=absolute_url(f"/uploads/vton/{filename}"),
         result_path=str(output_path),
         render_method=LOCAL_FIT_DIAGRAM,
-        message="Diagrama de caimento gerado com base nas medidas disponiveis.",
+        message="Diagrama de caimento gerado com base nas medidas disponíveis.",
     )
 
 
@@ -197,20 +207,20 @@ async def run_vton(data: VtonRunInput) -> VtonRunResult:
                 {
                     "provider": "preflight",
                     "error_type": "MissingGarmentImage",
-                    "message": "No garment image available for real VTON; using local fit diagram.",
+                    "message": "No garment image available for realistic preview; using local fit diagram.",
                 }
             )
             return _local_fit_diagram_result(
                 data,
                 used_fallback=True,
                 message=(
-                    "Nao encontramos uma imagem utilizavel da peca. "
-                    "Mostramos um diagrama de caimento para voce continuar."
+                    "Não encontramos uma imagem utilizável da peça. "
+                    "Mostramos um diagrama de caimento para você continuar."
                 ),
                 fallback_errors=fallback_errors,
             )
 
-        if is_external_vton_configured():
+        if is_external_vton_configured() and not _payload_uses_ephemeral_person(data.payload):
             try:
                 return await _run_external_only(data, provider)
             except Exception as error:
@@ -234,8 +244,8 @@ async def run_vton(data: VtonRunInput) -> VtonRunResult:
             data,
             used_fallback=True,
             message=(
-                "Previa realista indisponivel no momento. "
-                "Mostramos um diagrama de caimento para voce continuar."
+                "Prévia realista indisponível no momento. "
+                "Mostramos um diagrama de caimento para você continuar."
             ),
             fallback_errors=fallback_errors,
         )
@@ -244,7 +254,7 @@ async def run_vton(data: VtonRunInput) -> VtonRunResult:
         data,
         used_fallback=True,
         mode_requested="mock",
-        message="Modo invalido. Mostramos o diagrama de caimento.",
+        message="Modo inválido. Mostramos o diagrama de caimento.",
     )
 
 def create_vton_task(data: VtonRunInput) -> VtonTaskCreated:
@@ -261,15 +271,29 @@ def create_vton_task(data: VtonRunInput) -> VtonTaskCreated:
         task_id=task_id,
         state="queued",
         poll_after_seconds=VTON_TASK_POLL_SECONDS,
-        message="Tarefa VTON criada. Consulte o status ate o resultado ficar pronto.",
+        message="Prévia criada. Consulte o status até o resultado ficar pronto.",
     )
 
 
-def get_vton_task(task_id: str) -> Optional[VtonTaskStatusResponse]:
-    return _VTON_TASKS.get(task_id)
+def get_vton_task(task_id: str) -> VtonTaskStatusResponse:
+    task = _VTON_TASKS.get(task_id)
+    if task:
+        return task
+
+    return VtonTaskStatusResponse(
+        task_id=task_id,
+        state="failed",
+        error=(
+            "Não encontramos mais essa prévia. O servidor pode ter reiniciado; "
+            "gere o look novamente para continuar."
+        ),
+        poll_after_seconds=0,
+    )
 
 
 async def _execute_vton_task(task_id: str, data: VtonRunInput) -> None:
+    cleanup_references: list[str | Path | None] = _cleanup_references_for_payload(data.payload)
+
     _VTON_TASKS[task_id] = VtonTaskStatusResponse(
         task_id=task_id,
         state="running",
@@ -278,6 +302,7 @@ async def _execute_vton_task(task_id: str, data: VtonRunInput) -> None:
 
     try:
         result = await run_vton(data)
+        cleanup_references.extend([result.result_path, result.result_url])
         _VTON_TASKS[task_id] = VtonTaskStatusResponse(
             task_id=task_id,
             state="succeeded",
@@ -288,23 +313,26 @@ async def _execute_vton_task(task_id: str, data: VtonRunInput) -> None:
         _VTON_TASKS[task_id] = VtonTaskStatusResponse(
             task_id=task_id,
             state="failed",
-            error=f"Provider externo nao configurado: {error}",
+            error="A prévia realista não está configurada neste ambiente. Tente novamente mais tarde.",
             poll_after_seconds=VTON_TASK_POLL_SECONDS,
         )
     except ExternalVtonProviderError as error:
         _VTON_TASKS[task_id] = VtonTaskStatusResponse(
             task_id=task_id,
             state="failed",
-            error=f"Falha do provider VTON externo: {error}",
+            error="Não conseguimos criar a prévia realista agora. Tente novamente ou siga com o diagrama estimado.",
             poll_after_seconds=VTON_TASK_POLL_SECONDS,
         )
     except Exception as error:
+        LOGGER.exception("Unexpected VTON task failure: %s", error)
         _VTON_TASKS[task_id] = VtonTaskStatusResponse(
             task_id=task_id,
             state="failed",
-            error=f"Erro ao executar VTON: {type(error).__name__}: {error}",
+            error="Não conseguimos concluir essa prévia. Gere o look novamente em alguns instantes.",
             poll_after_seconds=VTON_TASK_POLL_SECONDS,
         )
+    finally:
+        schedule_upload_cleanup(cleanup_references)
 
 
 async def _run_external_only(data: VtonRunInput, provider: str) -> VtonRunResult:
@@ -341,32 +369,37 @@ async def _run_external_only(data: VtonRunInput, provider: str) -> VtonRunResult
 
 
 async def _run_huggingface_only(data: VtonRunInput) -> VtonRunResult:
-    public_payload = _ensure_public_vton_assets(
-        data.payload,
-        refresh_person_image=False,
-        create_missing_person=True,
-        require_neural_safe_person=True,
-    )
-    raw_response = await run_huggingface_vton(public_payload)
-    result_url = extract_huggingface_result_url(raw_response)
+    ephemeral_reference = data.payload.user_uploaded_person_image_url or data.payload.person_image_url
 
-    if not result_url:
-        raise ExternalVtonProviderError(
-            "Hugging Face respondeu, mas nenhuma URL de resultado foi encontrada."
+    try:
+        public_payload = _ensure_public_vton_assets(
+            data.payload,
+            refresh_person_image=False,
+            create_missing_person=True,
+            require_neural_safe_person=True,
         )
+        raw_response = await run_huggingface_vton(public_payload)
+        result_url = extract_huggingface_result_url(raw_response)
 
-    return VtonRunResult(
-        result_url=absolute_url(result_url),
-        result_path=None,
-        provider="huggingface",
-        mode_requested=data.mode,
-        render_method=NEURAL_REALISTIC,
-        status=raw_response.get("status"),
-        used_fallback=False,
-        success=True,
-        message="Prévia realista gerada via Hugging Face Spaces.",
-        raw_response=raw_response,
-    )
+        if not result_url:
+            raise ExternalVtonProviderError(
+                "Hugging Face respondeu, mas nenhuma URL de resultado foi encontrada."
+            )
+
+        return VtonRunResult(
+            result_url=absolute_url(result_url),
+            result_path=None,
+            provider="huggingface",
+            mode_requested=data.mode,
+            render_method=NEURAL_REALISTIC,
+            status=raw_response.get("status"),
+            used_fallback=False,
+            success=True,
+            message="Prévia realista gerada via Hugging Face Spaces.",
+            raw_response=raw_response,
+        )
+    finally:
+        delete_ephemeral_person_reference(ephemeral_reference)
 
 
 
@@ -398,6 +431,22 @@ def _payload_has_provider_ready_garment(payload: VtonPayload) -> bool:
     return bool(payload.garment_processed_url or payload.garment_original_url)
 
 
+def _cleanup_references_for_payload(payload: VtonPayload) -> list[str | Path | None]:
+    """Collect upload references created or used by a VTON task.
+
+    Cleanup is delayed by storage_manager, so the app still has time to poll and
+    display the output. External HTTP URLs outside /uploads are ignored by the
+    storage manager.
+    """
+
+    return [
+        payload.garment_processed_url,
+        payload.garment_original_url,
+        payload.person_image_url,
+        payload.user_uploaded_person_image_url,
+    ]
+
+
 def _fallback_error(provider: str, error: Exception) -> Dict[str, str]:
     message = str(error)
     return {
@@ -423,9 +472,10 @@ def _ensure_public_vton_assets(
         if payload.garment_original_url
         else None
     )
+    person_source = payload.user_uploaded_person_image_url or payload.person_image_url
     person_image_url = (
-        absolute_url(payload.person_image_url)
-        if payload.person_image_url
+        absolute_url(person_source)
+        if person_source
         else None
     )
 
@@ -454,6 +504,7 @@ def _ensure_public_vton_assets(
             "garment_processed_url": garment_processed_url,
             "garment_original_url": garment_original_url,
             "person_image_url": person_image_url,
+            "user_uploaded_person_image_url": payload.user_uploaded_person_image_url,
             "api_ready_payload": api_ready_payload,
         }
     )
@@ -471,13 +522,16 @@ def _resolve_neural_person_image_url(
         return template_url
 
     raise ExternalVtonProviderError(
-        "Nenhuma foto humana real ou template humano local esta disponivel para VTON neural."
+        "Nenhuma foto humana real ou template humano local está disponível para Prévia Realista."
     )
 
 
 def _is_neural_safe_person_url(person_image_url: Optional[str]) -> bool:
     if not person_image_url:
         return False
+
+    if is_ephemeral_person_reference(person_image_url):
+        return True
 
     normalized = unquote(urlparse(person_image_url).path).replace("\\", "/")
     internal_generated_markers = (
@@ -486,6 +540,12 @@ def _is_neural_safe_person_url(person_image_url: Optional[str]) -> bool:
         "/uploads/person/humanized_person_",
     )
     return not any(marker in normalized for marker in internal_generated_markers)
+
+
+def _payload_uses_ephemeral_person(payload: VtonPayload) -> bool:
+    return is_ephemeral_person_reference(
+        payload.user_uploaded_person_image_url or payload.person_image_url
+    )
 
 
 def _create_public_human_template_image(payload: VtonPayload) -> Optional[str]:

@@ -10,6 +10,7 @@ export type VtonPrepareInput = {
   garment_processed_url?: string | null;
   garment_original_url?: string | null;
   person_image_url?: string | null;
+  user_uploaded_person_image_url?: string | null;
   fit_zones: FitZone[];
 };
 
@@ -18,6 +19,7 @@ export type VtonPayload = {
   garment_processed_url?: string | null;
   garment_original_url?: string | null;
   person_image_url?: string | null;
+  user_uploaded_person_image_url?: string | null;
   fit_zones: FitZone[];
   render_mode: string;
   recommended_view_count: number;
@@ -67,4 +69,10 @@ export type VtonTaskStatusResponse = {
   result?: VtonRunResult | null;
   error?: string | null;
   poll_after_seconds: number;
+};
+
+export type PersonEphemeralUploadResult = {
+  person_image_url: string;
+  expires_in_seconds: number;
+  message: string;
 };

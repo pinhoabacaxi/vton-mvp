@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import asyncio
 import logging
 import os
@@ -7,6 +8,11 @@ from typing import Any, Dict, Optional
 from uuid import uuid4
 
 from app.models.vton import VtonPayload
+from app.services.person_image_store import (
+    delete_ephemeral_person_reference,
+    is_ephemeral_person_reference,
+    resolve_ephemeral_person_path,
+)
 from app.services.url_utils import absolute_url
 from app.utils.image_normalizer import (
     ImageNormalizationError,
@@ -41,14 +47,22 @@ async def run_huggingface_vton(payload: VtonPayload) -> Dict[str, Any]:
             "Hugging Face ignorado para manequim sintetico por HF_SKIP_FOR_MOCK_PERSON=true."
         )
 
-    person_source = _absolute_public_url(payload.person_image_url, "person_image_url")
+    person_reference = payload.user_uploaded_person_image_url or payload.person_image_url
+    person_source = _person_source_for_hf(person_reference)
     garment_source = _absolute_public_url(
         payload.garment_processed_url or payload.garment_original_url,
         "garment_processed_url",
     )
+    cleanup_paths: list[str] = []
 
     if _env_bool("HF_NORMALIZE_INPUTS", True):
-        person_url = normalize_image_for_hf(person_source, "person")
+        person_url = normalize_image_for_hf(
+            person_source,
+            "person",
+            require_public_url=not is_ephemeral_person_reference(person_reference),
+        )
+        if is_ephemeral_person_reference(person_reference):
+            cleanup_paths.append(person_url)
         garment_url = normalize_image_for_hf(garment_source, "garment")
     else:
         person_url = person_source
@@ -64,6 +78,10 @@ async def run_huggingface_vton(payload: VtonPayload) -> Dict[str, Any]:
         raise
     except Exception as error:
         raise _controlled_space_error(error) from error
+    finally:
+        for path in cleanup_paths:
+            _delete_local_file(path)
+        delete_ephemeral_person_reference(person_reference)
 
     serialized_output = _serialize_gradio_value(raw_result)
     output_items = _as_sequence(serialized_output)
@@ -94,14 +112,18 @@ def extract_huggingface_result_url(raw_response: Dict[str, Any]) -> Optional[str
     return None
 
 
-def normalize_image_for_hf(input_path_or_url: str, kind: str) -> str:
+def normalize_image_for_hf(
+    input_path_or_url: str,
+    kind: str,
+    require_public_url: bool = True,
+) -> str:
     try:
         normalized = normalize_image_for_vton(
             input_path_or_url,
             kind=kind,
             target_size=_target_size_for_hf(kind),
             max_file_size_bytes=_env_int("HF_IMAGE_MAX_BYTES", 2 * 1024 * 1024),
-            require_public_url=True,
+            require_public_url=require_public_url,
         )
     except ImageNormalizationError as error:
         raise HuggingFaceProviderError(
@@ -114,7 +136,17 @@ def normalize_image_for_hf(input_path_or_url: str, kind: str) -> str:
             "O modelo precisa reconhecer tracos humanos realistas."
         )
 
-    return normalized.url
+    return normalized.url if require_public_url else str(normalized.path)
+
+
+def _person_source_for_hf(reference: Optional[str]) -> str:
+    if not reference:
+        raise HuggingFaceProviderError("person_image_url ausente para Hugging Face VTON.")
+
+    if is_ephemeral_person_reference(reference):
+        return str(resolve_ephemeral_person_path(reference))
+
+    return _absolute_public_url(reference, "person_image_url")
 
 
 def _call_space(person_url: str, garment_url: str) -> Any:
@@ -171,6 +203,18 @@ def _absolute_public_url(path_or_url: Optional[str], field_name: str) -> str:
     raise HuggingFaceProviderError(
         f"{field_name} precisa ser URL publica. Configure PUBLIC_BACKEND_URL para arquivos /uploads."
     )
+
+
+def _delete_local_file(path_or_url: str) -> None:
+    if path_or_url.startswith(("http://", "https://", "/uploads")):
+        return
+
+    try:
+        path = Path(path_or_url)
+        if path.exists() and path.is_file():
+            path.unlink()
+    except OSError as error:
+        LOGGER.warning("Failed to delete temporary Hugging Face input: %s", error)
 
 
 def _target_size_for_hf(kind: str) -> tuple[int, int]:

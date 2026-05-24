@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Render neutral GLB mannequins into transparent PNG sources.
 
 Run with Blender:
