@@ -15,8 +15,8 @@ BASE_MODELS = [
     ),
     BodyModel(
         id="wide_shoulder",
-        label="Ombros largos",
-        description="Ombros mais presentes, quadril moderado e tronco definido.",
+        label="Ombros presentes",
+        description="Linha de ombros mais marcada, quadril moderado e tronco definido.",
         shoulder_ratio=1.14,
         hip_ratio=0.94,
         waist_ratio=0.78,
@@ -25,8 +25,8 @@ BASE_MODELS = [
     ),
     BodyModel(
         id="wide_hip",
-        label="Quadril amplo",
-        description="Quadril mais amplo, ombros moderados e cintura destacada.",
+        label="Quadril marcante",
+        description="Quadril mais presente, ombros moderados e cintura destacada.",
         shoulder_ratio=0.94,
         hip_ratio=1.16,
         waist_ratio=0.76,
@@ -46,7 +46,7 @@ BASE_MODELS = [
     BodyModel(
         id="athletic_compact",
         label="Atlético compacto",
-        description="Mais massa muscular relativa e cintura firme.",
+        description="Estrutura compacta, cintura firme e presença muscular relativa.",
         shoulder_ratio=1.08,
         hip_ratio=0.98,
         waist_ratio=0.74,
@@ -55,8 +55,8 @@ BASE_MODELS = [
     ),
     BodyModel(
         id="full_soft",
-        label="Volume macio",
-        description="Maior volume corporal geral, curvas suaves e proporções cheias.",
+        label="Curvas suaves",
+        description="Volume corporal geral maior, curvas suaves e proporções cheias.",
         shoulder_ratio=1.04,
         hip_ratio=1.08,
         waist_ratio=0.90,
@@ -72,6 +72,8 @@ def calculate_bmi(height_cm: float, weight_kg: float) -> float:
 
 
 def recommend_body_models(user_input: InitialBodyInput):
+    """Recommend starting silhouettes from measurements without asking for gender."""
+
     bmi = calculate_bmi(user_input.height_cm, user_input.weight_kg)
     models = []
 

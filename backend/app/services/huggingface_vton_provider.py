@@ -333,7 +333,7 @@ def _as_sequence(value: Any) -> list[Any]:
 
 
 def _space_id() -> str:
-    return _env_str("HF_SPACE_ID", "yisol/IDM-VTON")
+    return _env_str("HF_SPACE_ID", "Pinhoabacaxi/IDM-VTON")
 
 
 def _env_str(name: str, default: str) -> str:
