@@ -74,5 +74,6 @@ export type VtonTaskStatusResponse = {
 export type PersonEphemeralUploadResult = {
   person_image_url: string;
   expires_in_seconds: number;
+  enhanced: boolean;
   message: string;
 };

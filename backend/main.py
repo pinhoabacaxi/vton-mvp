@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -313,14 +313,15 @@ async def upload_garment(file: UploadFile = File(...)):
 
 
 @app.post("/person/upload-ephemeral", response_model=PersonEphemeralUploadResult)
-async def upload_ephemeral_person(file: UploadFile = File(...)):
+async def upload_ephemeral_person(file: UploadFile = File(...), enhance: bool = Form(True)):
     try:
         from app.services.person_image_store import save_ephemeral_person_upload
 
-        reference, expires_in_seconds = await save_ephemeral_person_upload(file)
+        reference, expires_in_seconds, enhanced = await save_ephemeral_person_upload(file, enhance=enhance)
         return PersonEphemeralUploadResult(
             person_image_url=reference,
             expires_in_seconds=expires_in_seconds,
+            enhanced=enhanced,
             message=(
                 "Foto recebida para esta sessão. Ela será removida do servidor "
                 "automaticamente após a geração da prévia ou ao expirar."

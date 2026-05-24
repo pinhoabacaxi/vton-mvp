@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
-from PIL import Image
+from PIL import Image, ImageOps
 
 from app.models.product import ProductScrapeResult
 from app.services.fabric_physics import analyze_fabric_text, infer_stretch_level
@@ -88,11 +90,23 @@ def _read_image_with_optional_tesseract(path: Path) -> str | None:
         _log_ocr_event("ocr_fallback", reason="pytesseract_unavailable")
         return None
 
+    configured_cmd = os.getenv("TESSERACT_CMD", "").strip()
+    if configured_cmd:
+        pytesseract.pytesseract.tesseract_cmd = configured_cmd
+    elif not shutil.which("tesseract"):
+        _log_ocr_event("ocr_fallback", reason="tesseract_binary_unavailable")
+        return None
+
     try:
         with Image.open(path) as image:
-            prepared = image.convert("RGB")
+            prepared = ImageOps.exif_transpose(image).convert("L")
+            prepared = ImageOps.autocontrast(prepared, cutoff=1)
             prepared.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
-            text = pytesseract.image_to_string(prepared, lang="por+eng")
+            text = pytesseract.image_to_string(
+                prepared,
+                lang=os.getenv("TESSERACT_LANG", "por+eng"),
+                config=os.getenv("TESSERACT_CONFIG", "--psm 6"),
+            )
             return text.strip() or None
     except Exception as error:
         _log_ocr_event("ocr_fallback", reason="ocr_failed", error=str(error))

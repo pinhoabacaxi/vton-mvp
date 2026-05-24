@@ -80,4 +80,5 @@ class VtonTaskStatusResponse(BaseModel):
 class PersonEphemeralUploadResult(BaseModel):
     person_image_url: str
     expires_in_seconds: int
+    enhanced: bool = True
     message: str

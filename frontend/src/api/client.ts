@@ -252,7 +252,10 @@ export async function uploadEphemeralPersonImage(
     uri: string;
     name: string;
     type: string;
-  }
+  },
+  options: {
+    enhance?: boolean;
+  } = {}
 ): Promise<PersonEphemeralUploadResult> {
   const formData = new FormData();
 
@@ -261,6 +264,7 @@ export async function uploadEphemeralPersonImage(
     name: file.name,
     type: file.type,
   } as unknown as Blob);
+  formData.append("enhance", String(options.enhance ?? true));
 
   const response = await fetchWithTimeout(`${API_BASE_URL}/person/upload-ephemeral`, {
     method: "POST",

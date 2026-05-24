@@ -18,7 +18,7 @@ from typing import Optional
 from uuid import uuid4
 
 from fastapi import UploadFile
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 
 
 LOGGER = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class EphemeralPersonImageError(Exception):
     pass
 
 
-async def save_ephemeral_person_upload(file: UploadFile) -> tuple[str, int]:
+async def save_ephemeral_person_upload(file: UploadFile, enhance: bool = True) -> tuple[str, int, bool]:
     """Save a privacy-sensitive person photo as a short-lived JPEG temp file."""
 
     content_type = (file.content_type or "").lower()
@@ -47,7 +47,7 @@ async def save_ephemeral_person_upload(file: UploadFile) -> tuple[str, int]:
     try:
         with Image.open(BytesIO(payload)) as source:
             image = ImageOps.exif_transpose(source)
-            image = _prepare_person_jpeg(image)
+            image = _prepare_person_jpeg(image, enhance=enhance)
     except (OSError, UnidentifiedImageError) as error:
         raise EphemeralPersonImageError("Não conseguimos abrir essa foto. Tente outra imagem.") from error
 
@@ -57,7 +57,7 @@ async def save_ephemeral_person_upload(file: UploadFile) -> tuple[str, int]:
 
     reference = f"{EPHEMERAL_PREFIX}{filename}"
     schedule_ephemeral_person_delete(reference, delay_seconds=DEFAULT_PERSON_TTL_SECONDS)
-    return reference, DEFAULT_PERSON_TTL_SECONDS
+    return reference, DEFAULT_PERSON_TTL_SECONDS, enhance
 
 
 def is_ephemeral_person_reference(reference: Optional[str]) -> bool:
@@ -111,7 +111,7 @@ async def _delete_ephemeral_later(reference: str, delay_seconds: int) -> None:
     delete_ephemeral_person_reference(reference)
 
 
-def _prepare_person_jpeg(image: Image.Image) -> Image.Image:
+def _prepare_person_jpeg(image: Image.Image, enhance: bool = True) -> Image.Image:
     if image.width < 320 or image.height < 480:
         raise EphemeralPersonImageError(
             "A foto está pequena demais. Use uma foto de corpo inteiro com boa luz."
@@ -120,6 +120,12 @@ def _prepare_person_jpeg(image: Image.Image) -> Image.Image:
     rgba = image.convert("RGBA")
     background = Image.new("RGB", rgba.size, (248, 248, 246))
     background.paste(rgba.convert("RGB"), mask=rgba.getchannel("A"))
+
+    if enhance:
+        background = ImageOps.autocontrast(background, cutoff=1)
+        background = ImageEnhance.Brightness(background).enhance(1.08)
+        background = ImageEnhance.Contrast(background).enhance(1.08)
+
     background.thumbnail((768, 1152), Image.Resampling.LANCZOS)
     return background
 

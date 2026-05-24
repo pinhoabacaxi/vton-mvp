@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Image, ScrollView, Text, View } from "react-native";
+import { Image, ScrollView, Switch, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 
@@ -64,6 +64,7 @@ export function VtonPreviewScreen({
   const [personPhotoUri, setPersonPhotoUri] = useState<string | null>(null);
   const [personUpload, setPersonUpload] = useState<PersonEphemeralUploadResult | null>(null);
   const [personUploading, setPersonUploading] = useState(false);
+  const [personEnhanceEnabled, setPersonEnhanceEnabled] = useState(true);
 
   const hasGarmentImage = Boolean(garment?.processed_url || garment?.original_url);
   const preferredMode: VtonRunMode = hasGarmentImage ? "auto" : "mock";
@@ -137,14 +138,20 @@ export function VtonPreviewScreen({
         height: compressed.height,
       });
 
-      const upload = await uploadEphemeralPersonImage({
-        uri: compressed.uri,
-        name: "person-photo.jpg",
-        type: "image/jpeg",
-      });
+      const upload = await uploadEphemeralPersonImage(
+        {
+          uri: compressed.uri,
+          name: "person-photo.jpg",
+          type: "image/jpeg",
+        },
+        {
+          enhance: personEnhanceEnabled,
+        }
+      );
 
       console.info("[State] Ephemeral person photo ready", {
         expiresInSeconds: upload.expires_in_seconds,
+        enhanced: upload.enhanced,
       });
       setPersonPhotoUri(compressed.uri);
       setPersonUpload(upload);
@@ -315,6 +322,35 @@ export function VtonPreviewScreen({
                   • {item}
                 </Text>
               ))}
+
+              <View
+                style={{
+                  alignItems: "center",
+                  backgroundColor: "#251238",
+                  borderColor: "#6f42c1",
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  flexDirection: "row",
+                  gap: 12,
+                  justifyContent: "space-between",
+                  padding: 14,
+                }}
+              >
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={{ color: fashionColors.text, fontWeight: "900" }}>
+                    Preparar fundo e luz automaticamente
+                  </Text>
+                  <Text style={{ color: fashionColors.textMuted, lineHeight: 19 }}>
+                    Remove metadados, clareia a imagem e aplica fundo claro quando a foto tiver transparência.
+                  </Text>
+                </View>
+                <Switch
+                  value={personEnhanceEnabled}
+                  onValueChange={setPersonEnhanceEnabled}
+                  trackColor={{ false: "#4a3a59", true: "#a855f7" }}
+                  thumbColor={personEnhanceEnabled ? "#fff7d6" : "#d8cce6"}
+                />
+              </View>
 
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <View style={{ flex: 1 }}>
