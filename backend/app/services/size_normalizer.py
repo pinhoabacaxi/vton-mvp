@@ -1,3 +1,6 @@
+﻿# -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import re
 from typing import Dict, List, Optional
 
@@ -16,189 +19,16 @@ from app.services.fabric_physics import (
 from app.utils.tiered_cache import get_cache, set_cache, stable_hash
 
 
-def _to_float(value: str) -> Optional[float]:
-    cleaned = value.replace(",", ".").strip()
-
-    try:
-        return float(cleaned)
-    except ValueError:
-        return None
-
-
-def normalize_size_text(raw_text: str) -> List[SizeMeasurement]:
-    """
-    Normalizador simples para MVP.
-    Lê linhas como:
-    P busto 88 cintura 70 quadril 94
-    M chest 94 waist 76 hip 100
-    G bust 100 waist 82 hips 106
-    """
-    if not raw_text.strip():
-        return []
-
-    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-    results: List[SizeMeasurement] = []
-
-    for line in lines:
-        lower = line.lower()
-
-        size_match = re.search(
-            r"\b(pp|xs|p|s|m|g|l|gg|xl|xxl|eg|plus|one size|\d{2,3})\b",
-            lower,
-        )
-
-        if not size_match:
-            continue
-
-        size_label = size_match.group(1).upper()
-
-        chest = _find_measure(lower, ["busto", "torax", "tórax", "chest", "bust"])
-        waist = _find_measure(lower, ["cintura", "waist"])
-        hip = _find_measure(lower, ["quadril", "hip", "hips"])
-        length = _find_measure(lower, ["comprimento", "length"])
-        shoulder = _find_measure(lower, ["ombro", "shoulder"])
-        sleeve = _find_measure(lower, ["manga", "sleeve"])
-
-        if any(value is not None for value in [chest, waist, hip, length, shoulder, sleeve]):
-            results.append(
-                SizeMeasurement(
-                    size_label=size_label,
-                    chest_cm=chest,
-                    waist_cm=waist,
-                    hip_cm=hip,
-                    length_cm=length,
-                    shoulder_cm=shoulder,
-                    sleeve_cm=sleeve,
-                )
-            )
-
-    return results
-
-
-def _find_measure(text: str, keywords: List[str]) -> Optional[float]:
-    for keyword in keywords:
-        pattern = rf"{keyword}\s*[:\-]?\s*(\d+(?:[,.]\d+)?)"
-        match = re.search(pattern, text)
-
-        if match:
-            return _to_float(match.group(1))
-
-    return None
-
-
-def evaluate_fit(data: FitCheckInput) -> FitCheckResult:
-    zones = [
-        _evaluate_zone(
-            zone="chest",
-            user_value=data.user_chest_cm,
-            garment_value=data.garment_size.chest_cm,
-            label="Busto/Tórax",
-        ),
-        _evaluate_zone(
-            zone="waist",
-            user_value=data.user_waist_cm,
-            garment_value=data.garment_size.waist_cm,
-            label="Cintura",
-        ),
-        _evaluate_zone(
-            zone="hip",
-            user_value=data.user_hip_cm,
-            garment_value=data.garment_size.hip_cm,
-            label="Quadril",
-        ),
-    ]
-
-    return FitCheckResult(
-        zones=zones,
-        summary=_build_summary(zones),
-    )
-
-
-def _evaluate_zone(
-    zone: str,
-    user_value: float,
-    garment_value: Optional[float],
-    label: str,
-) -> FitZone:
-    if garment_value is None:
-        return FitZone(
-            zone=zone,
-            difference_cm=None,
-            status="unknown",
-            color="gray",
-            message=f"{label}: a peça não informou essa medida.",
-        )
-
-    difference = round(garment_value - user_value, 2)
-
-    if difference < 0:
-        return FitZone(
-            zone=zone,
-            difference_cm=difference,
-            status="too_small",
-            color="red",
-            message=f"{label}: peça menor que o corpo em {abs(difference)} cm. Alto risco de não servir.",
-        )
-
-    if difference < 2:
-        return FitZone(
-            zone=zone,
-            difference_cm=difference,
-            status="tight",
-            color="red",
-            message=f"{label}: diferença de {difference} cm. Provavelmente apertado.",
-        )
-
-    if 2 <= difference <= 5:
-        return FitZone(
-            zone=zone,
-            difference_cm=difference,
-            status="balanced",
-            color="yellow",
-            message=f"{label}: diferença de {difference} cm. Caimento próximo ao corpo.",
-        )
-
-    return FitZone(
-        zone=zone,
-        difference_cm=difference,
-        status="loose",
-        color="green",
-        message=f"{label}: diferença de {difference} cm. Folga confortável.",
-    )
-
-
-def _build_summary(zones: List[FitZone]) -> str:
-    statuses = [zone.status for zone in zones]
-
-    if "too_small" in statuses:
-        return "A peça parece pequena em pelo menos uma região importante."
-
-    if "tight" in statuses:
-        return "A peça pode ficar apertada em algumas regiões."
-
-    known_statuses = [status for status in statuses if status != "unknown"]
-
-    if known_statuses and all(status == "loose" for status in known_statuses):
-        return "A peça parece ter folga confortável."
-
-    if "balanced" in statuses:
-        return "A peça parece ter caimento próximo ao corpo."
-
-    return "Não há medidas suficientes para uma avaliação completa."
-
-
-# Advanced fit engine definitions override the MVP functions above while keeping
-# backward-compatible imports stable for the running FastAPI app.
 MEASUREMENT_ALIASES: Dict[str, List[str]] = {
-    "chest_cm": ["busto", "torax", "tórax", "peito", "chest", "bust", "bust size"],
+    "chest_cm": ["busto", "tórax", "torax", "peito", "chest", "bust", "bust size"],
     "waist_cm": ["cintura", "waist"],
-    "hip_cm": ["quadril", "quadris", "anca", "gluteos", "glúteos", "hip", "hips"],
+    "hip_cm": ["quadril", "quadris", "anca", "glúteos", "gluteos", "hip", "hips"],
     "length_cm": ["comprimento total", "comprimento", "altura da peça", "length", "garment length", "clothing length"],
     "sleeve_cm": ["manga", "comprimento da manga", "sleeve", "sleeve length"],
-    "biceps_cm": ["arm circumference", "largura do braço", "upper arm", "biceps", "bíceps", "bicep", "ceps", "braco", "braço", "armhole"],
+    "biceps_cm": ["circunferência do braço", "circunferencia do braco", "largura do braço", "largura do braco", "upper arm", "biceps", "bíceps", "bicep", "braço", "braco", "arm circumference"],
     "top_length_cm": ["top length", "comprimento superior", "comprimento da parte superior", "comprimento do top"],
     "inseam_cm": ["entrepernas", "entre pernas", "inseam", "comprimento interno", "costura interna"],
-    "thigh_cm": ["coxa", "circunferencia da coxa", "circunferência da coxa", "thigh"],
+    "thigh_cm": ["coxa", "circunferência da coxa", "circunferencia da coxa", "thigh"],
     "shoulder_cm": ["ombro", "ombros", "shoulder", "shoulders", "shoulder width"],
     "rise_cm": ["gancho", "cavalo", "cavalete", "rise", "front rise"],
     "wrist_cm": ["punho", "wrist", "cuff"],
@@ -235,49 +65,11 @@ ZONE_FIELDS = [
 ]
 
 CATEGORY_EASE_CM: Dict[str, Dict[str, float]] = {
-    "top": {
-        "chest": 4.0,
-        "waist": 3.0,
-        "hip": 3.0,
-        "shoulder": 1.0,
-        "sleeve": 0.5,
-        "biceps": 3.0,
-        "top_length": 0.0,
-        "length": 0.0,
-    },
-    "pants": {
-        "waist": 2.0,
-        "hip": 4.0,
-        "thigh": 4.0,
-        "inseam": 0.0,
-        "rise": 0.5,
-        "length": 0.0,
-    },
-    "dress": {
-        "chest": 4.0,
-        "waist": 3.0,
-        "hip": 5.0,
-        "length": 0.0,
-        "sleeve": 0.5,
-        "biceps": 2.5,
-    },
-    "outerwear": {
-        "chest": 7.0,
-        "waist": 5.0,
-        "hip": 5.0,
-        "shoulder": 1.5,
-        "sleeve": 1.0,
-        "biceps": 4.0,
-        "top_length": 0.0,
-    },
-    "bodycon": {
-        "chest": 0.0,
-        "waist": 0.0,
-        "hip": 1.0,
-        "biceps": 0.5,
-        "thigh": 1.0,
-        "length": 0.0,
-    },
+    "top": {"chest": 4.0, "waist": 3.0, "hip": 3.0, "shoulder": 1.0, "sleeve": 0.5, "biceps": 3.0, "top_length": 0.0, "length": 0.0},
+    "pants": {"waist": 2.0, "hip": 4.0, "thigh": 4.0, "inseam": 0.0, "rise": 0.5, "length": 0.0},
+    "dress": {"chest": 4.0, "waist": 3.0, "hip": 5.0, "length": 0.0, "sleeve": 0.5, "biceps": 2.5},
+    "outerwear": {"chest": 7.0, "waist": 5.0, "hip": 5.0, "shoulder": 1.5, "sleeve": 1.0, "biceps": 4.0, "top_length": 0.0},
+    "bodycon": {"chest": 0.0, "waist": 0.0, "hip": 1.0, "biceps": 0.5, "thigh": 1.0, "length": 0.0},
 }
 
 STRETCH_EASE_OFFSET = {
@@ -289,17 +81,8 @@ STRETCH_EASE_OFFSET = {
     "elastic": -3.0,
 }
 
-SIZE_ORDER = ["P", "M", "G", "GG"]
-SIZE_ALIASES = {
-    "S": "P",
-    "P": "P",
-    "M": "M",
-    "L": "G",
-    "G": "G",
-    "XL": "GG",
-    "GG": "GG",
-}
-
+SIZE_ORDER = ["PP", "P", "M", "G", "GG"]
+SIZE_ALIASES = {"XS": "PP", "S": "P", "P": "P", "M": "M", "L": "G", "G": "G", "XL": "GG", "GG": "GG", "XXL": "XGG"}
 GRADE_STEP_CM = {
     "chest_cm": 4.0,
     "waist_cm": 4.0,
@@ -314,6 +97,50 @@ GRADE_STEP_CM = {
     "rise_cm": 0.5,
     "wrist_cm": 0.4,
 }
+
+SIZE_PATTERN = re.compile(
+    r"\b(pp|xs|p|s|m|g|l|gg|xl|xxl|xxxl|eg|plus|one size|tamanho unico|tamanho único|\d{2,3})\b",
+    re.IGNORECASE,
+)
+
+
+def normalize_size_text(raw_text: str) -> List[SizeMeasurement]:
+    """Parse public size text into normalized garment measurements."""
+
+    if not raw_text.strip():
+        return []
+
+    tabular_results = _parse_common_size_table_rows(raw_text)
+    if tabular_results:
+        return extrapolate_size_grading(tabular_results)
+
+    results: List[SizeMeasurement] = []
+    for block in _candidate_size_blocks(raw_text):
+        lower = block.lower()
+        size_match = SIZE_PATTERN.search(lower)
+        if not size_match:
+            continue
+
+        values = {
+            field: _find_measure(lower, aliases, field_name=field)
+            for field, aliases in MEASUREMENT_ALIASES.items()
+        }
+        additional = _extract_dynamic_measurements(lower, values)
+
+        if any(value is not None for value in values.values()) or additional:
+            results.append(
+                SizeMeasurement(
+                    size_label=_normalize_size_label(size_match.group(1)),
+                    **values,
+                    garment_category=_infer_category(lower),
+                    stretch_level=_infer_stretch_level(lower),
+                    additional_measurements=additional,
+                    is_estimated=False,
+                    confidence=0.92,
+                )
+            )
+
+    return extrapolate_size_grading(results)
 
 
 def extrapolate_size_grading(sizes: List[SizeMeasurement]) -> List[SizeMeasurement]:
@@ -339,13 +166,11 @@ def extrapolate_size_grading(sizes: List[SizeMeasurement]) -> List[SizeMeasureme
     for label in SIZE_ORDER:
         if label in expanded:
             continue
-
         offset = SIZE_ORDER.index(label) - anchor_index
         values = {}
         for field, step in GRADE_STEP_CM.items():
             base_value = getattr(anchor, field, None)
             values[field] = round(base_value + (step * offset), 1) if base_value is not None else None
-
         expanded[label] = anchor.model_copy(
             update={
                 "size_label": label,
@@ -364,50 +189,6 @@ def extrapolate_size_grading(sizes: List[SizeMeasurement]) -> List[SizeMeasureme
     return [expanded[label] for label in SIZE_ORDER if label in expanded] + extras
 
 
-def normalize_size_text(raw_text: str) -> List[SizeMeasurement]:
-    """Parse public size text into normalized garment measurements.
-
-    The parser is conservative: it only extracts visible text and supports
-    common Portuguese/English synonyms used in e-commerce size guides.
-    """
-
-    if not raw_text.strip():
-        return []
-
-    blocks = _candidate_size_blocks(raw_text)
-    results: List[SizeMeasurement] = []
-
-    for block in blocks:
-        lower = block.lower()
-        size_match = re.search(
-            r"\b(pp|xs|p|s|m|g|l|gg|xl|xxl|xxxl|eg|plus|one size|tamanho unico|tamanho único|\d{2,3})\b",
-            lower,
-        )
-        if not size_match:
-            continue
-
-        values = {
-            field: _find_measure_advanced(lower, aliases, field_name=field)
-            for field, aliases in MEASUREMENT_ALIASES.items()
-        }
-        additional = _extract_dynamic_measurements(lower, values)
-
-        if any(value is not None for value in values.values()) or additional:
-            results.append(
-                SizeMeasurement(
-                    size_label=size_match.group(1).upper(),
-                    **values,
-                    garment_category=_infer_category(lower),
-                    stretch_level=_infer_stretch_level(lower),
-                    additional_measurements=additional,
-                    is_estimated=False,
-                    confidence=0.92,
-                )
-            )
-
-    return extrapolate_size_grading(results)
-
-
 def evaluate_fit(data: FitCheckInput) -> FitCheckResult:
     """Evaluate garment fit using ease allowance by category and stretch."""
 
@@ -416,9 +197,7 @@ def evaluate_fit(data: FitCheckInput) -> FitCheckResult:
     if cached:
         return cached.model_copy(update={"cache_key": cache_key, "cache_hit": True})
 
-    result = _evaluate_fit_uncached(data).model_copy(
-        update={"cache_key": cache_key, "cache_hit": False}
-    )
+    result = _evaluate_fit_uncached(data).model_copy(update={"cache_key": cache_key, "cache_hit": False})
     set_cache(cache_key, result)
     return result
 
@@ -426,10 +205,7 @@ def evaluate_fit(data: FitCheckInput) -> FitCheckResult:
 def _evaluate_fit_uncached(data: FitCheckInput) -> FitCheckResult:
     candidates = extrapolate_size_grading(data.candidate_sizes or [data.garment_size])
     selected_label = data.garment_size.size_label.strip().upper()
-    selected = next(
-        (size for size in candidates if size.size_label.strip().upper() == selected_label),
-        data.garment_size,
-    )
+    selected = next((size for size in candidates if size.size_label.strip().upper() == selected_label), data.garment_size)
 
     fabric_stretch = infer_stretch_level(data.fabric_analysis)
     fabric_modifier = fabric_ease_modifier(data.fabric_analysis)
@@ -437,12 +213,7 @@ def _evaluate_fit_uncached(data: FitCheckInput) -> FitCheckResult:
 
     size_options: List[FitSizeOption] = []
     for candidate in candidates:
-        zones, summary = _evaluate_single_fit(
-            data=data,
-            garment=candidate,
-            fabric_stretch=fabric_stretch,
-            fabric_modifier=fabric_modifier,
-        )
+        zones, summary = _evaluate_single_fit(data, candidate, fabric_stretch, fabric_modifier)
         size_options.append(
             FitSizeOption(
                 size_label=candidate.size_label,
@@ -455,16 +226,9 @@ def _evaluate_fit_uncached(data: FitCheckInput) -> FitCheckResult:
 
     best = min(size_options, key=lambda item: item.score) if size_options else None
     if best:
-        size_options = [
-            option.model_copy(update={"is_best_match": option.size_label == best.size_label})
-            for option in size_options
-        ]
+        size_options = [option.model_copy(update={"is_best_match": option.size_label == best.size_label}) for option in size_options]
 
-    selected_option = next(
-        (option for option in size_options if option.size_label == selected.size_label),
-        size_options[0] if size_options else None,
-    )
-
+    selected_option = next((option for option in size_options if option.size_label == selected.size_label), size_options[0] if size_options else None)
     if selected_option:
         return FitCheckResult(
             zones=selected_option.zones,
@@ -475,18 +239,8 @@ def _evaluate_fit_uncached(data: FitCheckInput) -> FitCheckResult:
             fabric_warnings=fabric_warnings,
         )
 
-    zones, summary = _evaluate_single_fit(
-        data=data,
-        garment=selected,
-        fabric_stretch=fabric_stretch,
-        fabric_modifier=fabric_modifier,
-    )
-    return FitCheckResult(
-        zones=zones,
-        summary=summary,
-        selected_size_label=selected.size_label,
-        fabric_warnings=fabric_warnings,
-    )
+    zones, summary = _evaluate_single_fit(data, selected, fabric_stretch, fabric_modifier)
+    return FitCheckResult(zones=zones, summary=summary, selected_size_label=selected.size_label, fabric_warnings=fabric_warnings)
 
 
 def _evaluate_single_fit(
@@ -496,9 +250,7 @@ def _evaluate_single_fit(
     fabric_modifier: float,
 ) -> tuple[List[FitZone], str]:
     user = data.user_measurements
-    category = _normalize_category(
-        data.garment_category or garment.garment_category or _infer_category_from_measurement(garment)
-    )
+    category = _normalize_category(data.garment_category or garment.garment_category or _infer_category_from_measurement(garment))
     stretch = _normalize_stretch(data.stretch_level or garment.stretch_level or fabric_stretch)
     ease_modifier = data.user_ease_modifier + fabric_modifier
 
@@ -507,7 +259,6 @@ def _evaluate_single_fit(
         body_value = getattr(data, user_field, None)
         if user and hasattr(user, garment_field):
             body_value = getattr(user, garment_field) or body_value
-
         garment_value = getattr(garment, garment_field, None)
         zones.append(
             _evaluate_zone(
@@ -523,9 +274,7 @@ def _evaluate_single_fit(
         )
 
     for key, garment_value in garment.additional_measurements.items():
-        user_value = None
-        if user:
-            user_value = user.additional_measurements.get(key)
+        user_value = user.additional_measurements.get(key) if user else None
         zones.append(
             _evaluate_zone(
                 zone=key,
@@ -540,136 +289,6 @@ def _evaluate_single_fit(
         )
 
     return zones, _build_summary(zones)
-
-
-def _score_zones(zones: List[FitZone]) -> float:
-    score = 0.0
-    known_count = 0
-    for zone in zones:
-        if zone.status == "sem_informacao":
-            score += 3.0
-            continue
-        known_count += 1
-        if zone.status == "apertado":
-            score += 100.0 + abs(zone.difference_cm or 0) * 4.0
-        elif zone.status == "justo":
-            score += 14.0 + abs(zone.difference_cm or 0)
-        elif zone.color == "blue":
-            score += 24.0 + abs(zone.difference_cm or 0)
-        else:
-            score += abs((zone.difference_cm or 0) - 3.0)
-
-    if known_count == 0:
-        score += 80.0
-
-    return round(score, 3)
-
-
-def _candidate_size_blocks(raw_text: str) -> List[str]:
-    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-    blocks: List[str] = []
-    size_line_count = sum(1 for line in lines if _contains_size_label(line.lower()))
-
-    for index, line in enumerate(lines):
-        blocks.append(line)
-        if size_line_count == 0:
-            merged = " ".join(lines[index : index + 3])
-            blocks.append(merged)
-
-    # Some stores flatten all measurements in a single paragraph.
-    if size_line_count == 0:
-        blocks.append(" ".join(lines))
-
-    unique_blocks: List[str] = []
-    seen = set()
-    for block in blocks:
-        if block not in seen:
-            unique_blocks.append(block)
-            seen.add(block)
-
-    return unique_blocks
-
-
-def _contains_size_label(text: str) -> bool:
-    return bool(
-        re.search(
-            r"\b(pp|xs|p|s|m|g|l|gg|xl|xxl|xxxl|eg|plus|one size|tamanho unico|tamanho ÃƒÂºnico|\d{2,3})\b",
-            text,
-        )
-    )
-
-
-def _find_measure_advanced(
-    text: str,
-    aliases: List[str],
-    field_name: Optional[str] = None,
-) -> Optional[float]:
-    for alias in sorted(aliases, key=len, reverse=True):
-        escaped = re.escape(alias)
-        patterns = [
-            rf"{escaped}\s*(?:\([^)]*\))?\s*[:：=\-]?\s*(\d+(?:[,.]\d+)?)\s*(?:cm|centimetros|centímetros)?",
-            rf"(\d+(?:[,.]\d+)?)\s*(?:cm|centimetros|centímetros)?\s*(?:de\s+)?{escaped}",
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, text, flags=re.IGNORECASE)
-            if match:
-                if _is_excluded_alias_match(field_name, alias, text, match.start(), match.end()):
-                    continue
-                return _to_float(match.group(1))
-
-    return None
-
-
-def _is_excluded_alias_match(
-    field_name: Optional[str],
-    alias: str,
-    text: str,
-    start: int,
-    end: int,
-) -> bool:
-    if field_name != "length_cm" or alias.lower() not in {"length", "comprimento"}:
-        return False
-
-    before = text[max(0, start - 24) : start].lower()
-
-    return bool(
-        re.search(r"(busto|torax|tórax|chest|bust|cintura|waist|quadril|hip|hips)\s*[:=\-]?\s*$", before)
-        or
-        re.search(r"(sleeve|manga|top|superior)\s*$", before)
-    )
-
-
-def _extract_dynamic_measurements(
-    text: str,
-    known_values: Dict[str, Optional[float]],
-) -> Dict[str, float]:
-    matched_values = {value for value in known_values.values() if value is not None}
-    dynamic: Dict[str, float] = {}
-    pattern = re.compile(
-        r"([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s/]{2,28})\s*[:：=\-]\s*(\d+(?:[,.]\d+)?)\s*(?:cm)?",
-        flags=re.IGNORECASE,
-    )
-
-    known_aliases = {
-        alias
-        for aliases in MEASUREMENT_ALIASES.values()
-        for alias in aliases
-    }
-
-    for label, raw_value in pattern.findall(text):
-        normalized_label = re.sub(r"\s+", "_", label.strip().lower())
-        value = _to_float(raw_value)
-
-        if value is None or value in matched_values:
-            continue
-
-        if label.strip().lower() in known_aliases:
-            continue
-
-        dynamic[normalized_label] = value
-
-    return dynamic
 
 
 def _evaluate_zone(
@@ -700,20 +319,16 @@ def _evaluate_zone(
     pressure = round(max(-6.0, min(6.0, -delta)) / 6.0, 3)
 
     if delta < -2:
-        status = "apertado"
-        color = "red"
+        status, color = "apertado", "red"
         message = f"{label}: APERTADO ({delta:+.1f} cm após margem de {ease:.1f} cm)."
     elif delta <= 1:
-        status = "justo"
-        color = "yellow"
+        status, color = "justo", "yellow"
         message = f"{label}: JUSTO ({delta:+.1f} cm após margem de {ease:.1f} cm)."
     elif delta <= 6:
-        status = "folgado"
-        color = "green"
+        status, color = "folgado", "green"
         message = f"{label}: FOLGADO confortável ({delta:+.1f} cm após margem de {ease:.1f} cm)."
     else:
-        status = "folgado"
-        color = "blue"
+        status, color = "folgado", "blue"
         message = f"{label}: bem folgado/oversize ({delta:+.1f} cm após margem de {ease:.1f} cm)."
 
     return FitZone(
@@ -730,39 +345,164 @@ def _evaluate_zone(
     )
 
 
-def _ease_allowance(
-    zone: str,
-    category: str,
-    stretch_level: str,
-    ease_modifier: float = 0.0,
-) -> float:
+
+def _parse_common_size_table_rows(raw_text: str) -> List[SizeMeasurement]:
+    """Parse compact rows commonly produced by OCR from marketplace size tables.
+
+    Example supported row: `M 72-102 85` when the header contains waist and
+    length. Range values are treated as elastic/adjustable measurements: the
+    upper bound is used for fit, while the lower bound is preserved in
+    additional_measurements.
+    """
+
+    lower = raw_text.lower()
+    has_waist = any(token in lower for token in ("cintura", "waist", "tamanho da cintura"))
+    has_length = any(token in lower for token in ("comprimento", "length"))
+    if not (has_waist and has_length):
+        return []
+
+    normalized_text = re.sub(r"[|;]+", " ", raw_text)
+    normalized_text = re.sub(r"(?i)\bbr\b", " ", normalized_text)
+    rows: List[SizeMeasurement] = []
+    row_pattern = re.compile(
+        r"\b(pp|xs|p|s|m|g|l|gg|xl|xxl)\b\s+"
+        r"(\d+(?:[,.]\d+)?(?:\s*[-–—]\s*\d+(?:[,.]\d+)?)?)\s+"
+        r"(\d+(?:[,.]\d+)?)\b",
+        flags=re.IGNORECASE,
+    )
+
+    for match in row_pattern.finditer(normalized_text):
+        size_label = _normalize_size_label(match.group(1))
+        waist_value, waist_min = _parse_measure_or_range(match.group(2))
+        length_value, _ = _parse_measure_or_range(match.group(3))
+        if waist_value is None and length_value is None:
+            continue
+        additional = {}
+        if waist_min is not None and waist_value is not None and waist_min != waist_value:
+            additional["waist_min_cm"] = waist_min
+        rows.append(
+            SizeMeasurement(
+                size_label=size_label,
+                waist_cm=waist_value,
+                length_cm=length_value,
+                garment_category="pants",
+                stretch_level="high" if waist_min is not None and waist_value and waist_value - waist_min >= 12 else "medium",
+                additional_measurements=additional,
+                is_estimated=False,
+                confidence=0.95,
+            )
+        )
+
+    return rows
+
+
+def _parse_measure_or_range(raw_value: str) -> tuple[Optional[float], Optional[float]]:
+    parts = re.split(r"\s*[-–—]\s*", raw_value.strip())
+    parsed = [_to_float(part) for part in parts if part.strip()]
+    parsed = [value for value in parsed if value is not None]
+    if not parsed:
+        return None, None
+    if len(parsed) == 1:
+        return parsed[0], None
+    return max(parsed), min(parsed)
+def _candidate_size_blocks(raw_text: str) -> List[str]:
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    blocks: List[str] = []
+
+    for index, line in enumerate(lines):
+        blocks.append(line)
+        merged = " ".join(lines[index : index + 4])
+        if merged != line:
+            blocks.append(merged)
+    blocks.append(" ".join(lines))
+
+    unique_blocks: List[str] = []
+    seen = set()
+    for block in blocks:
+        if block and block not in seen:
+            unique_blocks.append(block)
+            seen.add(block)
+    return unique_blocks
+
+
+def _find_measure(text: str, aliases: List[str], field_name: Optional[str] = None) -> Optional[float]:
+    for alias in sorted(aliases, key=len, reverse=True):
+        escaped = re.escape(alias)
+        patterns = [
+            rf"{escaped}\s*(?:\([^)]*\))?\s*[:：=\-]?\s*(\d+(?:[,.]\d+)?)\s*(?:cm|centímetros|centimetros)?",
+            rf"(\d+(?:[,.]\d+)?)\s*(?:cm|centímetros|centimetros)?\s*(?:de\s+)?{escaped}",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match and not _is_excluded_alias_match(field_name, alias, text, match.start(), match.end()):
+                return _to_float(match.group(1))
+    return None
+
+
+def _is_excluded_alias_match(field_name: Optional[str], alias: str, text: str, start: int, end: int) -> bool:
+    if field_name != "length_cm" or alias.lower() not in {"length", "comprimento"}:
+        return False
+    before = text[max(0, start - 28) : start].lower()
+    return bool(
+        re.search(r"(busto|tórax|torax|chest|bust|cintura|waist|quadril|hip|hips)\s*[:=\-]?\s*$", before)
+        or re.search(r"(sleeve|manga|top|superior)\s*$", before)
+    )
+
+
+def _extract_dynamic_measurements(text: str, known_values: Dict[str, Optional[float]]) -> Dict[str, float]:
+    matched_values = {value for value in known_values.values() if value is not None}
+    dynamic: Dict[str, float] = {}
+    pattern = re.compile(r"([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s/]{2,28})\s*[:：=\-]\s*(\d+(?:[,.]\d+)?)\s*(?:cm)?", flags=re.IGNORECASE)
+    known_aliases = {alias for aliases in MEASUREMENT_ALIASES.values() for alias in aliases}
+
+    for label, raw_value in pattern.findall(text):
+        value = _to_float(raw_value)
+        clean_label = label.strip().lower()
+        if value is None or value in matched_values or clean_label in known_aliases:
+            continue
+        dynamic[re.sub(r"\s+", "_", clean_label)] = value
+    return dynamic
+
+
+def _score_zones(zones: List[FitZone]) -> float:
+    score = 0.0
+    known_count = 0
+    for zone in zones:
+        if zone.status == "sem_informacao":
+            score += 3.0
+            continue
+        known_count += 1
+        if zone.status == "apertado":
+            score += 100.0 + abs(zone.difference_cm or 0) * 4.0
+        elif zone.status == "justo":
+            score += 14.0 + abs(zone.difference_cm or 0)
+        elif zone.color == "blue":
+            score += 24.0 + abs(zone.difference_cm or 0)
+        else:
+            score += abs((zone.difference_cm or 0) - 3.0)
+    if known_count == 0:
+        score += 80.0
+    return round(score, 3)
+
+
+def _ease_allowance(zone: str, category: str, stretch_level: str, ease_modifier: float = 0.0) -> float:
     category_ease = CATEGORY_EASE_CM.get(category, CATEGORY_EASE_CM["top"])
     base = category_ease.get(zone, 2.0)
-
     if zone in {"length", "top_length", "inseam", "sleeve", "rise"}:
         base = category_ease.get(zone, 0.0)
-
-    return round(
-        max(-4.0, base + STRETCH_EASE_OFFSET.get(stretch_level, 0.0) + ease_modifier),
-        2,
-    )
+    return round(max(-4.0, base + STRETCH_EASE_OFFSET.get(stretch_level, 0.0) + ease_modifier), 2)
 
 
 def _build_summary(zones: List[FitZone]) -> str:
     known = [zone for zone in zones if zone.status != "sem_informacao"]
-
     if not known:
         return "A loja não informou medidas suficientes para diagnosticar o caimento."
-
     if any(zone.status == "apertado" for zone in known):
         return "Há regiões com risco de aperto ou tecido sob pressão."
-
     if any(zone.status == "justo" for zone in known):
         return "A peça tende a vestir justo em algumas regiões."
-
     if any(zone.color == "blue" for zone in known):
         return "A peça tende a ficar bem ampla/oversize."
-
     return "A peça tem folga confortável nas regiões avaliadas."
 
 
@@ -789,14 +529,14 @@ def _infer_category_from_measurement(garment: SizeMeasurement) -> str:
 def _normalize_category(value: Optional[str]) -> str:
     if not value:
         return "top"
-    value = value.strip().lower()
-    if value in {"calca", "calça", "pants", "jeans", "shorts", "skirt", "saia"}:
+    normalized = value.strip().lower()
+    if normalized in {"calca", "calça", "pants", "jeans", "shorts", "skirt", "saia"}:
         return "pants"
-    if value in {"dress", "vestido"}:
+    if normalized in {"dress", "vestido"}:
         return "dress"
-    if value in {"jacket", "jaqueta", "coat", "casaco", "outerwear", "blazer"}:
+    if normalized in {"jacket", "jaqueta", "coat", "casaco", "outerwear", "blazer"}:
         return "outerwear"
-    if value in {"bodycon", "fitness", "legging", "compressao", "compressão"}:
+    if normalized in {"bodycon", "fitness", "legging", "compressao", "compressão"}:
         return "bodycon"
     return "top"
 
@@ -822,3 +562,14 @@ def _normalize_stretch(value: Optional[str]) -> str:
     if normalized in {"elastic", "elastico", "elástico"}:
         return "elastic"
     return "none"
+
+
+def _normalize_size_label(value: str) -> str:
+    return SIZE_ALIASES.get(value.strip().upper(), value.strip().upper())
+
+
+def _to_float(value: str) -> Optional[float]:
+    try:
+        return float(value.replace(",", ".").strip())
+    except ValueError:
+        return None

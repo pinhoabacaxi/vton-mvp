@@ -206,9 +206,15 @@ def render_mannequin_front(input_data: MannequinRenderInput):
 @app.post("/product/scrape", response_model=ProductScrapeResult)
 async def scrape_product(input_data: ProductUrlInput):
     try:
-        from app.services.product_scraper import scrape_product_page
+        from app.services.product_scraper import AntiBotChallengeError, scrape_product_page
 
         return await scrape_product_page(input_data.url)
+
+    except AntiBotChallengeError as error:
+        raise HTTPException(
+            status_code=409,
+            detail=str(error),
+        ) from error
 
     except ImportError as error:
         raise HTTPException(
@@ -223,6 +229,30 @@ async def scrape_product(input_data: ProductUrlInput):
         raise HTTPException(
             status_code=400,
             detail=f"Não foi possível analisar a URL: {error}",
+        ) from error
+
+
+@app.post("/product/ocr-size-chart", response_model=ProductScrapeResult)
+async def ocr_size_chart(file: UploadFile = File(...)):
+    try:
+        from app.services.vision_ocr_service import extract_size_chart_from_image
+
+        result = await extract_size_chart_from_image(file)
+        return absolutize_model_urls(result, fields=["image_url"])
+
+    except ImportError as error:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Leitura automática por imagem indisponível neste ambiente. "
+                "Você ainda pode preencher as medidas manualmente."
+            ),
+        ) from error
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Não foi possível ler a tabela pela imagem: {error}",
         ) from error
 
 

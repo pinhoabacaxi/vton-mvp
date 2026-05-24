@@ -53,6 +53,10 @@ class ProductScrapeResult(BaseModel):
     normalized_sizes: List[SizeMeasurement] = Field(default_factory=list)
     fabric_composition_text: Optional[str] = None
     fabric_analysis: Optional[FabricAnalysis] = None
+    confidence_score: Optional[float] = None
+    extraction_method: Optional[str] = None
+    fallback_reason: Optional[str] = None
+    blocked_by_antibot: bool = False
 
 
 class GarmentUploadResult(BaseModel):
