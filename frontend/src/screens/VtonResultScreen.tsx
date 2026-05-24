@@ -265,12 +265,30 @@ function buildPreviewSourceInfo(result: VtonRunResult): {
   message: string;
   tone: "gold" | "purple" | "neutral";
 } {
+  if (result.render_method === "NEURAL_REALISTIC") {
+    return {
+      label: "Prévia Realista",
+      title: "Prévia realista gerada por IA",
+      message: "A API VTON conseguiu processar uma imagem humana compatível e a foto da peça. Use como referência visual, não como promessa de caimento perfeito.",
+      tone: "purple",
+    };
+  }
+
+  if (result.render_method === "LOCAL_FIT_DIAGRAM") {
+    return {
+      label: "Diagrama de Caimento Estimado",
+      title: "Diagrama estimado para decidir com segurança",
+      message: "A prévia neural não estava disponível ou a imagem não era compatível. Mostramos um diagrama local com proporção, folga e regiões de atenção.",
+      tone: "gold",
+    };
+  }
+
   const provider = (result.provider || "").toLowerCase();
   const isRealProvider = provider.includes("replicate") || provider.includes("huggingface") || provider.includes("external");
 
   if (isRealProvider && !result.used_fallback) {
     return {
-      label: "VTON real",
+      label: "Prévia Realista",
       title: "Prévia realista gerada por IA",
       message: "A API VTON conseguiu processar a imagem da pessoa e da peça. Ainda assim, considere o resultado uma estimativa visual.",
       tone: "purple",
@@ -279,16 +297,16 @@ function buildPreviewSourceInfo(result: VtonRunResult): {
 
   if (result.used_fallback) {
     return {
-      label: "Prévia estimada",
-      title: "Usamos o mock local para manter o fluxo",
-      message: "Tentamos a geração realista primeiro, mas ela não estava disponível para esta imagem. Abaixo está uma estimativa visual de proporção e caimento.",
+      label: "Diagrama de Caimento Estimado",
+      title: "Usamos o diagrama local para manter o fluxo",
+      message: "Tentamos a geração realista primeiro, mas ela não estava disponível para esta imagem. Abaixo está uma leitura estimada de proporção e caimento.",
       tone: "gold",
     };
   }
 
   return {
-    label: "Prévia estimada",
-    title: "Mock local de caimento",
+    label: "Diagrama de Caimento Estimado",
+    title: "Diagrama local de caimento",
     message: "Esta imagem foi gerada pelo motor local do app. Ela ajuda a avaliar proporção, folga e regiões de atenção, sem prometer precisão perfeita.",
     tone: "gold",
   };

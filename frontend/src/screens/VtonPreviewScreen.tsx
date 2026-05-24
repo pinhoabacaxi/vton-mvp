@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Image, ScrollView, Text, View } from "react-native";
 
 import {
@@ -38,6 +38,13 @@ type Props = {
   }) => void;
 };
 
+const ROTATING_LOADING_MESSAGES = [
+  "Analisando caimento...",
+  "Ajustando iluminação...",
+  "Processando a imagem da peça...",
+  "Preparando a melhor prévia disponível...",
+];
+
 export function VtonPreviewScreen({
   mannequin,
   fitZones,
@@ -54,6 +61,18 @@ export function VtonPreviewScreen({
   const processedGarmentUrl = resolveApiUrl(garment?.processed_url || garment?.original_url);
   const mannequinRenderUrl = resolveApiUrl(mannequinRender?.image_url);
 
+  useEffect(() => {
+    if (!loadingMode) return undefined;
+
+    let index = 0;
+    const interval = setInterval(() => {
+      index = (index + 1) % ROTATING_LOADING_MESSAGES.length;
+      setTaskMessage(ROTATING_LOADING_MESSAGES[index]);
+    }, 5200);
+
+    return () => clearInterval(interval);
+  }, [loadingMode]);
+
   async function ensureFrontRender(): Promise<MannequinRenderResult | null> {
     if (mannequinRender) return mannequinRender;
 
@@ -66,6 +85,11 @@ export function VtonPreviewScreen({
     let coldStartTimer: ReturnType<typeof setTimeout> | null = null;
 
     try {
+      console.info("[API] Requesting VTON", {
+        mode,
+        hasGarmentImage,
+        fitZoneCount: fitZones.length,
+      });
       setLoadingMode(mode);
       setError(null);
       setTaskMessage("Preparando seu look...");
@@ -91,6 +115,7 @@ export function VtonPreviewScreen({
           result_path: mock.result_path,
           provider: "local_mock",
           mode_requested: "mock",
+          render_method: mock.render_method ?? "LOCAL_FIT_DIAGRAM",
           status: "succeeded",
           used_fallback: false,
           success: true,
@@ -121,9 +146,17 @@ export function VtonPreviewScreen({
         }
       );
 
+      console.info("[API] VTON result ready", {
+        render_method: result.render_method,
+        provider: result.provider,
+        used_fallback: result.used_fallback,
+      });
       onResultReady?.({ result, payload: prepared, frontRender: front ?? null });
 
     } catch (err) {
+      console.info("[Flow] VTON preview failed", {
+        message: err instanceof Error ? err.message : "unknown",
+      });
       setError(err instanceof Error ? err.message : "Tente novamente em instantes.");
     } finally {
       if (coldStartTimer) {

@@ -21,6 +21,8 @@ services:
         value: "true"
       - key: VTON_MOCK_BODY_STYLE
         value: premium_gray
+      - key: VTON_HUMAN_TEMPLATE_DIR
+        value: app/assets/human_templates
       - key: REPLICATE_MODEL
         value: cuuupid/idm-vton
       - key: REPLICATE_API_TOKEN

@@ -113,6 +113,7 @@ function MissingFlowScreen({
 export default function App() {
   const [loading, setLoading] = useState(false);
   const [bootingProfile, setBootingProfile] = useState(true);
+  const [flowHydrated, setFlowHydrated] = useState(() => useVtonStore.persist.hasHydrated());
   const [initialRouteName, setInitialRouteName] =
     useState<keyof RootStackParamList>("Home");
   const [currentRouteName, setCurrentRouteName] = useState<keyof RootStackParamList>("Home");
@@ -152,6 +153,19 @@ export default function App() {
   const setProductDetails = useVtonStore((state) => state.setProductDetails);
 
   useEffect(() => {
+    const unsubscribe = useVtonStore.persist.onFinishHydration(() => {
+      console.info("[State] VTON flow restored from AsyncStorage");
+      setFlowHydrated(true);
+    });
+
+    if (useVtonStore.persist.hasHydrated()) {
+      setFlowHydrated(true);
+    }
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
 
     async function boot() {
@@ -169,10 +183,12 @@ export default function App() {
           setInitialInput(profile.initial_input);
           setSelectedModel(profile.selected_model);
           setMannequin(profile.mannequin);
-          const routeToResume = isResumableRoute(lastRoute) ? lastRoute : "Home";
-          setInitialRouteName(routeToResume);
-          setCurrentRouteName(routeToResume);
         }
+
+        const routeToResume = isResumableRoute(lastRoute) ? lastRoute : "Home";
+        console.info("[State] Last route loaded", { route: routeToResume });
+        setInitialRouteName(routeToResume);
+        setCurrentRouteName(routeToResume);
       } finally {
         if (mounted) {
           setBootingProfile(false);
@@ -197,16 +213,19 @@ export default function App() {
     const routeName = navigationRef.getCurrentRoute()?.name as keyof RootStackParamList | undefined;
     if (!routeName) return;
     setCurrentRouteName(routeName);
+    console.info("[Flow] Route changed", { route: routeName });
     void AsyncStorage.setItem(LAST_ROUTE_KEY, routeName);
   }
 
   function handleGlobalBack() {
     const routeName = navigationRef.getCurrentRoute()?.name as keyof RootStackParamList | undefined;
     if (routeName && routeName !== "Home" && navigationRef.canGoBack()) {
+      console.info("[Flow] Android back", { from: routeName, action: "goBack" });
       navigationRef.goBack();
       return;
     }
     if (routeName && routeName !== "Home" && navigationRef.isReady()) {
+      console.info("[Flow] Android back", { from: routeName, action: "navigateHome" });
       navigationRef.navigate("Home");
       return;
     }
@@ -286,7 +305,7 @@ export default function App() {
     navigation.navigate("VtonResult");
   }
 
-  if (bootingProfile) {
+  if (bootingProfile || !flowHydrated) {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={{ flex: 1, backgroundColor: "#12071f", justifyContent: "center", alignItems: "center", gap: 12 }}>

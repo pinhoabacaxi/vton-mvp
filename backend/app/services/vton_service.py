@@ -38,6 +38,7 @@ from app.services.huggingface_vton_provider import (
     is_huggingface_configured,
     run_huggingface_vton,
 )
+from app.services.human_template_bank import select_human_template_path
 from app.services.humanized_person_renderer import render_humanized_tryon_person
 from app.services.image_processor import UPLOAD_DIR, normalize_garment_visual
 from app.services.mannequin_renderer import (
@@ -56,12 +57,6 @@ VTON_DIR = UPLOAD_DIR / "vton"
 VTON_DIR.mkdir(parents=True, exist_ok=True)
 PERSON_RENDER_DIR = UPLOAD_DIR / "person"
 PERSON_RENDER_DIR.mkdir(parents=True, exist_ok=True)
-HUMAN_TEMPLATE_DIR = Path(
-    os.getenv(
-        "VTON_HUMAN_TEMPLATE_DIR",
-        str(Path(__file__).resolve().parents[1] / "assets" / "human_templates"),
-    )
-)
 VTON_TASK_POLL_SECONDS = 2
 _VTON_TASKS: Dict[str, VtonTaskStatusResponse] = {}
 _GARMENT_RENDERER = MannequinGarmentRenderer()
@@ -515,18 +510,7 @@ def _create_public_human_template_image(payload: VtonPayload) -> Optional[str]:
 
 
 def _select_human_template_path(payload: VtonPayload) -> Optional[Path]:
-    base_model_id = str(payload.mannequin.base_model_id or "balanced_soft").strip()
-    safe_base = "".join(ch for ch in base_model_id if ch.isalnum() or ch in {"_", "-"})
-    candidates = [
-        HUMAN_TEMPLATE_DIR / f"{safe_base}.jpg",
-        HUMAN_TEMPLATE_DIR / f"{safe_base}.png",
-        HUMAN_TEMPLATE_DIR / "neutral" / f"{safe_base}.jpg",
-        HUMAN_TEMPLATE_DIR / "neutral" / f"{safe_base}.png",
-        HUMAN_TEMPLATE_DIR / "balanced_soft.jpg",
-        HUMAN_TEMPLATE_DIR / "default.jpg",
-        HUMAN_TEMPLATE_DIR / "default.png",
-    ]
-    return next((path for path in candidates if path.exists() and path.is_file()), None)
+    return select_human_template_path(payload)
 
 
 def _fit_template_to_canvas(image: Image.Image, size: tuple[int, int]) -> Image.Image:

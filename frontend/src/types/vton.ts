@@ -3,6 +3,7 @@ import { FitZone } from "./product";
 
 export type VtonRunMode = "mock" | "external" | "auto";
 export type VtonTaskState = "queued" | "running" | "succeeded" | "failed";
+export type VtonRenderMethod = "NEURAL_REALISTIC" | "LOCAL_FIT_DIAGRAM";
 
 export type VtonPrepareInput = {
   mannequin: MannequinParams;
@@ -31,6 +32,7 @@ export type VtonMockInput = {
 export type VtonMockResult = {
   result_url: string;
   result_path: string;
+  render_method: VtonRenderMethod;
   message: string;
 };
 
@@ -44,6 +46,7 @@ export type VtonRunResult = {
   result_path?: string | null;
   provider: string;
   mode_requested: VtonRunMode;
+  render_method: VtonRenderMethod;
   status?: string | null;
   used_fallback: boolean;
   success: boolean;

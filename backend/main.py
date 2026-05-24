@@ -338,7 +338,7 @@ def fit_feedback(input_data: FitFeedbackInput):
         raise HTTPException(
             status_code=501,
             detail=(
-                "Recurso indisponÃƒÂ­vel: dependÃƒÂªncia ausente para feedback de "
+                "Recurso indisponível: dependência ausente para feedback de "
                 f"caimento ({error})."
             ),
         ) from error

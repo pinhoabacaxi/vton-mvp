@@ -85,6 +85,11 @@ export function ProductUrlScreen({
   }
 
   function captureProduct(result: ProductScrapeResult, sourceUrl: string) {
+    console.info("[State] Product measurements persisted", {
+      source: result.extraction_method ?? "unknown",
+      sizeCount: result.normalized_sizes?.length ?? 0,
+      confidence: result.confidence_score ?? null,
+    });
     setProduct(result);
     onProductCaptured?.({
       product_url: result.source_url ?? sourceUrl,
@@ -116,9 +121,13 @@ export function ProductUrlScreen({
     setLoading(true);
     setLinkError(null);
     try {
+      console.info("[API] Scraping product link", { host: detectSourceName(trimmedUrl) });
       const result = await scrapeProduct(trimmedUrl);
       captureProduct(result, trimmedUrl);
     } catch (err) {
+      console.info("[Flow] Product link failed", {
+        message: err instanceof Error ? err.message : "unknown",
+      });
       showLinkError(
         err instanceof Error
           ? err.message
@@ -147,6 +156,10 @@ export function ProductUrlScreen({
     }
 
     const asset = result.assets[0];
+    console.info("[Flow] User uploaded OCR image", {
+      width: asset.width,
+      height: asset.height,
+    });
     setOcrLoading(true);
     setLinkError(null);
     try {
@@ -155,9 +168,16 @@ export function ProductUrlScreen({
         name: asset.fileName ?? "tabela-medidas.jpg",
         type: asset.mimeType ?? "image/jpeg",
       });
+      console.info("[API] OCR size chart completed", {
+        sizeCount: ocrResult.normalized_sizes?.length ?? 0,
+        confidence: ocrResult.confidence_score ?? null,
+      });
       captureProduct(ocrResult, "ocr://size-chart");
       setManualOpen((ocrResult.normalized_sizes?.length ?? 0) === 0);
     } catch (err) {
+      console.info("[Flow] OCR size chart failed", {
+        message: err instanceof Error ? err.message : "unknown",
+      });
       showLinkError(
         err instanceof Error
           ? err.message
@@ -195,6 +215,10 @@ export function ProductUrlScreen({
       blocked_by_antibot: false,
     };
 
+    console.info("[State] Manual measurements persisted", {
+      sizeLabel: size.size_label,
+      filledFields: [size.chest_cm, size.waist_cm, size.hip_cm, size.length_cm].filter((value) => value != null).length,
+    });
     captureProduct(result, "manual://measurements");
     setLinkError(null);
     setManualOpen(false);
